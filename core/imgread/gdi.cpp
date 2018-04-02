@@ -33,14 +33,16 @@ Disc* load_gdi(const char* file)
 
 	char path[512];
 	strcpy(path,file);
-	ssize_t len=strlen(file);
-	while (len>=0)
+	size_t len=strlen(file);
+	while (true)
 	{
-		if (path[len]=='\\' || path[len]=='/')
+		if (path[len]=='\\' || path[len]=='/' || len == 0)
 			break;
 		len--;
 	}
-	len++;
+	if (path[len]=='\\' || path[len]=='/')
+		len++;
+
 	char* pathptr=&path[len];
 	u32 TRACK=0,FADS=0,CTRL=0,SSIZE=0;
 	s32 OFFSET=0;
