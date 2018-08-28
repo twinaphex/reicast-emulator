@@ -12,6 +12,7 @@
 #include <glsm/glsm.h>
 #endif
 #include "../rend/rend.h"
+#include "../hw/sh4/sh4_mem.h"
 
 #if defined(_XBOX) || defined(_WIN32)
 char slash = '\\';
@@ -105,8 +106,11 @@ static retro_rumble_interface rumble;
 int dc_init(int argc,wchar* argv[]);
 void dc_run();
 void dc_term(void);
-void rend_terminate();
 void dc_stop();
+void bm_Reset() ;
+extern Renderer* renderer;
+bool rend_single_frame();
+void rend_cancel_emu_wait();
 
 static int co_argc;
 static wchar** co_argv;
@@ -115,12 +119,51 @@ char *game_data;
 char g_base_name[128];
 char game_dir[1024];
 char game_dir_no_slash[1024];
+static bool emu_inited = false;
+static bool performed_serialization = false;
+#if !defined(TARGET_NO_THREADS)
+static void *emu_thread_func(void *);
+static cThread emu_thread(&emu_thread_func, 0);
+static cMutex mtx_serialization ;
+static cMutex mtx_mainloop ;
+static void *emu_thread_func(void *)
+{
+    char* argv[] = { "reicast" };
+    
+    dc_init(1, argv);
+    
+    emu_inited = true;
+    while ( true )
+    {
+    	performed_serialization = false ;
+    	mtx_mainloop.Lock() ;
+        dc_run();
+        mtx_mainloop.Unlock() ;
+
+    	mtx_serialization.Lock() ;
+    	mtx_serialization.Unlock() ;
+
+    	if (!performed_serialization)
+    		break ;
+    }
+
+    dc_term();
+
+    return NULL;
+}
+#endif
+
 
 void co_dc_yield(void)
 {
-   if (settings.UpdateMode || settings.UpdateModeForced)
-      return;
-   dc_stop();
+#if !defined(TARGET_NO_THREADS)
+    if (!settings.rend.ThreadedRendering)
+#endif
+    {
+    	if (settings.UpdateMode || settings.UpdateModeForced)
+    		return;
+    	dc_stop();
+    }
 }
 
 void retro_set_video_refresh(retro_video_refresh_t cb)
@@ -196,6 +239,15 @@ void retro_set_environment(retro_environment_t cb)
       {
          "reicast_internal_resolution",
          "Internal resolution (restart); 640x480|320x240|1280x960|1920x1440|2560x1920|3200x2400|3840x2880|4480x3360|5120x3840|5760x4320|6400x4800|7040x5280|7680x5760|8320x6240|8960x6720|9600x7200|10240x7680|10880x8160|11520x8640|12160x9120|12800x9600",
+      },
+      {
+#ifdef HAVE_OIT
+         "reicast_oit_alpha_sorting",
+         "Alpha sorting; per-pixel (accurate)",
+#else
+         "reicast_alpha_sorting",
+         "Alpha sorting; per-triangle (normal)|per-strip (fast, least accurate)",
+#endif
       },
       {
          "reicast_gdrom_fast_loading",
@@ -277,6 +329,12 @@ void retro_set_environment(retro_environment_t cb)
          "reicast_render_to_texture_upscaling",
          "Render To Texture Upscaling; 1x|2x|3x|4x|8x",
       },
+#if !defined(TARGET_NO_THREADS)
+      {
+         "reicast_threaded_rendering",
+         "Threaded rendering (restart); disabled|enabled",
+      },
+#endif
       {
          "reicast_enable_purupuru",
          "Purupuru Pack (restart); enabled|disabled"
@@ -406,6 +464,25 @@ static void update_variables(bool first_startup)
    }
    else
       GDROM_TICK      = 1500000;
+
+#ifdef HAVE_OIT
+   var.key = "reicast_oit_alpha_sorting";
+#else
+   var.key = "reicast_alpha_sorting";
+#endif
+
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp(var.value, "per-strip (fast, least accurate)"))
+         settings.pvr.Emulation.AlphaSortMode = 1;
+      else if (!strcmp(var.value, "per-triangle (normal)"))
+         settings.pvr.Emulation.AlphaSortMode = 0;
+      else if (!strcmp(var.value, "per-pixel (accurate)"))
+         settings.pvr.Emulation.AlphaSortMode = 0; /* value not used for OIT */
+   }
+   else
+      settings.pvr.Emulation.AlphaSortMode = 0;
+
 
    var.key = "reicast_mipmapping";
 
@@ -619,6 +696,23 @@ static void update_variables(bool first_startup)
    else if (first_startup)
       settings.rend.RenderToTextureUpscale = 1;
 
+#if !defined(TARGET_NO_THREADS)
+   if (first_startup)
+   {
+	   var.key = "reicast_threaded_rendering";
+
+	   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+	   {
+		   if (!strcmp("enabled", var.value))
+			   settings.rend.ThreadedRendering = true;
+		   else
+			   settings.rend.ThreadedRendering = false;
+	   }
+	   else
+		   settings.rend.ThreadedRendering = false;
+   }
+#endif
+
    var.key = "reicast_enable_purupuru";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       enable_purupuru = (strcmp("enabled", var.value) == 0);
@@ -680,32 +774,73 @@ static void update_variables(bool first_startup)
    else
       allow_service_buttons = false;
 }
-
+bool renderer_inited = false;
 void retro_run (void)
 {
    bool updated = false;
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
       update_variables(false);
 
-   if (first_run)
+#if !defined(TARGET_NO_THREADS)
+   if (settings.rend.ThreadedRendering)
    {
-      dc_init(co_argc,co_argv);
-      dc_run();
-      first_run = false;
-      return;
-   }
+	   // On the first call, we start the emulator thread
+	   if (first_run)
+	   {
+		   emu_thread.Start();
+		   first_run = false;
+	   }
+	   // Then we wait until the emulator has initialized
+	   if (!emu_inited)
+		   return;
 
-   dc_run();
+	   glsm_ctl(GLSM_CTL_STATE_BIND, NULL);
+
+	   // We can now initialize the renderer
+	   if (!renderer_inited)
+	   {
+		   renderer->Init();
+		   renderer_inited = true;
+	   }
+	   /// And start rendering
+	   is_dupe = !rend_single_frame();
+
+	   glsm_ctl(GLSM_CTL_STATE_UNBIND, NULL);
+
+	   poll_cb();
+   }
+   else
+#endif
+   {
+	   if (first_run)
+	   {
+		   dc_init(co_argc,co_argv);
+		   dc_run();
+		   first_run = false;
+		   return;
+	   }
+	   dc_run();
+   }
 #if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES)
    video_cb(is_dupe ? 0 : RETRO_HW_FRAME_BUFFER_VALID, screen_width, screen_height, 0);
 #endif
-   is_dupe     = true;
+#if !defined(TARGET_NO_THREADS)
+   if (!settings.rend.ThreadedRendering)
+#endif
+	   is_dupe = true;
 }
 
 void retro_reset (void)
 {
-   //TODO
-   dc_term();
+#if !defined(TARGET_NO_THREADS)
+   if (settings.rend.ThreadedRendering)
+   {
+	   dc_stop();
+	   emu_inited = false;
+   }
+   else
+#endif
+	   dc_term();
    first_run = true;
    settings.dreamcast.cable = 3;
    update_variables(false);
@@ -1020,42 +1155,131 @@ void retro_unload_game(void)
       free(game_data);
    game_data = NULL;
 
-#ifdef HAVE_TEXUPSCALE
-   void shutdown_thread_pool();
-   printf("Shutting down thread pool...\n");
-   shutdown_thread_pool();
-#endif
-   printf("...Done\n");
-   rend_terminate();
    dc_stop();
-   dc_term();
+#if !defined(TARGET_NO_THREADS)
+   if (settings.rend.ThreadedRendering)
+   {
+	   rend_cancel_emu_wait();
+	   printf("Waiting for emu thread...\n");
+	   emu_thread.WaitToEnd();
+	   printf("...Done\n");
+   }
+   else
+#endif
+	   dc_term();
 }
 
 
 // Memory/Serialization
 void *retro_get_memory_data(unsigned type)
 {
+   if ( type == RETRO_MEMORY_SYSTEM_RAM )
+      return mem_b.data;
    return 0; //TODO
 }
 
 size_t retro_get_memory_size(unsigned type)
 {
+   if ( type == RETRO_MEMORY_SYSTEM_RAM )
+      return mem_b.size;
    return 0; //TODO
 }
 
 size_t retro_serialize_size (void)
 {
-   return 0; //TODO
+   unsigned int total_size = 0 ;
+   void *data = NULL ;
+
+#if !defined(TARGET_NO_THREADS)
+    if (settings.rend.ThreadedRendering && emu_inited)
+    {
+    	mtx_serialization.Lock() ;
+  		dc_stop() ;
+        rend_cancel_emu_wait();
+    	mtx_mainloop.Lock() ;
+    }
+#endif
+   dc_serialize(&data, &total_size) ;
+   performed_serialization = true ;
+
+#if !defined(TARGET_NO_THREADS)
+    if (settings.rend.ThreadedRendering && emu_inited)
+    {
+    	mtx_mainloop.Unlock() ;
+    	mtx_serialization.Unlock() ;
+    }
+#endif
+   return total_size;
 }
 
 bool retro_serialize(void *data, size_t size)
 {
-   return false; //TODO
+   unsigned int total_size = 0 ;
+   void *data_ptr = data ;
+   bool result = false ;
+
+#if !defined(TARGET_NO_THREADS)
+   if ( settings.rend.ThreadedRendering && !emu_inited )
+	   return false ;
+
+    if (settings.rend.ThreadedRendering && emu_inited)
+    {
+    	mtx_serialization.Lock() ;
+  		dc_stop() ;
+        rend_cancel_emu_wait();
+    	mtx_mainloop.Lock() ;
+    }
+#endif
+
+   result = dc_serialize(&data_ptr, &total_size) ;
+   performed_serialization = true ;
+
+#if !defined(TARGET_NO_THREADS)
+    if (settings.rend.ThreadedRendering && emu_inited)
+    {
+    	mtx_mainloop.Unlock() ;
+    	mtx_serialization.Unlock() ;
+    }
+#endif
+
+    return result ;
 }
 
 bool retro_unserialize(const void * data, size_t size)
 {
-   return false; //TODO
+   unsigned int total_size = 0 ;
+   void *data_ptr = (void*)data ;
+   bool result = false ;
+
+#if !defined(TARGET_NO_THREADS)
+   if ( settings.rend.ThreadedRendering && !emu_inited )
+	   return false ;
+#endif
+
+   bm_Reset() ;
+
+#if !defined(TARGET_NO_THREADS)
+    if (settings.rend.ThreadedRendering && emu_inited)
+    {
+    	mtx_serialization.Lock() ;
+  		dc_stop() ;
+        rend_cancel_emu_wait();
+    	mtx_mainloop.Lock() ;
+    }
+#endif
+
+    result = dc_unserialize(&data_ptr, &total_size) ;
+    performed_serialization = true ;
+
+#if !defined(TARGET_NO_THREADS)
+    if (settings.rend.ThreadedRendering && emu_inited)
+    {
+    	mtx_mainloop.Unlock() ;
+    	mtx_serialization.Unlock() ;
+    }
+#endif
+
+    return result ;
 }
 
 // Cheats
@@ -1154,14 +1378,19 @@ unsigned retro_api_version(void)
 //Reicast stuff
 void os_DoEvents(void)
 {
-   is_dupe = false;
-   poll_cb();
+#if !defined(TARGET_NO_THREADS)
+	if (!settings.rend.ThreadedRendering)
+#endif
+	{
+		is_dupe = false;
+		poll_cb();
 
-   if (settings.UpdateMode || settings.UpdateModeForced)
-   {
-      rend_end_render();
-      dc_stop();
-   }
+		if (settings.UpdateMode || settings.UpdateModeForced)
+		{
+			rend_end_render();
+			dc_stop();
+		}
+	}
 }
 
 void os_CreateWindow()
@@ -1454,5 +1683,6 @@ int push_vmu_screen(u8* buffer) { return 0; }
 void os_DebugBreak(void)
 {
    printf("DEBUGBREAK!\n");
-   exit(-1);
+   //exit(-1);
+   __builtin_trap();
 }

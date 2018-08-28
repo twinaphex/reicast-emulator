@@ -74,6 +74,7 @@ SOURCES_CXX := \
 					$(CORE_DIR)/core/imgread/gdi.cpp \
 					\
 					$(CORE_DIR)/core/nullDC.cpp \
+					$(CORE_DIR)/core/serialize.cpp \
 					$(CORE_DIR)/core/stdclass.cpp \
 					\
 					$(DEPS_DIR)/coreio/coreio.cpp \
@@ -140,6 +141,7 @@ ifeq ($(platform), unix)
 SOURCES_ASM += $(CORE_DIR)/core/rec-x86/rec_lin86_asm.S
 else
 SOURCES_ASM += $(CORE_DIR)/core/rec-x86/rec_win86_asm.S
+#SOURCES_ASM += $(CORE_DIR)/core/hw/arm7/arm7_win86_asm.S
 endif
 SOURCES_CXX += $(CORE_DIR)/core/rec-x86/rec_x86_asm.cpp \
 					$(CORE_DIR)/core/rec-x86/rec_x86_driver.cpp \
@@ -164,7 +166,7 @@ SOURCES_CXX += $(CORE_DIR)/core/hw/sh4/dyna/decoder.cpp \
 
 endif
 
-ifneq (,$(findstring arm, $(ARCH)))
+ifeq ($(WITH_DYNAREC), arm)
 SOURCES_ASM += $(CORE_DIR)/core/rec-ARM/ngen_arm.S
 endif
 

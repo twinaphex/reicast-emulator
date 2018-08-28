@@ -200,9 +200,9 @@ struct gl_cached_state
    int cap_translate[SGL_CAP_MAX];
 };
 
-static GLint glsm_max_textures;
+GLint glsm_max_textures;
 struct retro_hw_render_callback hw_render;
-static struct gl_cached_state gl_state;
+struct gl_cached_state gl_state;
 
 /* GL wrapper-side */
 
@@ -2471,7 +2471,9 @@ void rglUniform2uiv(	GLint location,
 #ifdef GLSM_DEBUG
    log_cb(RETRO_LOG_INFO, "glUniform2uiv.\n");
 #endif
+#if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES) && defined(HAVE_OPENGLES3)
    glUniform2uiv(location, count, value);
+#endif
 }
 
 /*

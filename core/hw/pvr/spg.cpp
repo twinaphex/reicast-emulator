@@ -18,7 +18,7 @@ u32 vblk_cnt=0;
 u32 Line_Cycles=0;
 u32 Frame_Cycles=0;
 int render_end_sched;
-static int vblank_sched;
+int vblank_sched;
 int time_sync;
 
 void CalculateSync(void)
@@ -150,7 +150,9 @@ int rend_end_sch(int tag, int cycl, int jitt)
 	asic_RaiseInterrupt(holly_RENDER_DONE_isp);
 	asic_RaiseInterrupt(holly_RENDER_DONE_vd);
 
+#ifdef TARGET_NO_THREADS
    if (!settings.UpdateMode && !settings.UpdateModeForced)
+#endif
       rend_end_render();
 
 	return 0;

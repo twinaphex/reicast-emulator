@@ -36,87 +36,6 @@
 #define CPUUpdateTicksAccess16(a) 1
 
 
-enum
-{
-	RN_CPSR      = 16,
-	RN_SPSR      = 17,
-
-	R13_IRQ      = 18,
-	R14_IRQ      = 19,
-	SPSR_IRQ     = 20,
-	R13_USR      = 26,
-	R14_USR      = 27,
-	R13_SVC      = 28,
-	R14_SVC      = 29,
-	SPSR_SVC     = 30,
-	R13_ABT      = 31,
-	R14_ABT      = 32,
-	SPSR_ABT     = 33,
-	R13_UND      = 34,
-	R14_UND      = 35,
-	SPSR_UND     = 36,
-	R8_FIQ       = 37,
-	R9_FIQ       = 38,
-	R10_FIQ      = 39,
-	R11_FIQ      = 40,
-	R12_FIQ      = 41,
-	R13_FIQ      = 42,
-	R14_FIQ      = 43,
-	SPSR_FIQ     = 44,
-	RN_PSR_FLAGS = 45,
-	R15_ARM_NEXT = 46,
-	INTR_PEND    = 47,
-	CYCL_CNT     = 48,
-
-	RN_ARM_REG_COUNT,
-};
-
-typedef union
-{
-	struct
-	{
-		u8 B0;
-		u8 B1;
-		u8 B2;
-		u8 B3;
-	} B;
-	
-	struct
-	{
-		u16 W0;
-		u16 W1;
-	} W;
-
-	union
-	{
-		struct
-		{
-			u32 _pad0 : 28;
-			u32 V     : 1; //Bit 28
-			u32 C     : 1; //Bit 29
-			u32 Z     : 1; //Bit 30
-			u32 N     : 1; //Bit 31
-		};
-
-		struct
-		{
-			u32 _pad1 : 28;
-			u32 NZCV  : 4; //Bits [31:28]
-		};
-	} FLG;
-
-	struct
-	{
-		u32 M     : 5;  //mode, PSR[4:0]
-		u32 _pad0 : 1;  //not used / zero
-		u32 F     : 1;  //FIQ disable, PSR[6]
-		u32 I     : 1;  //IRQ disable, PSR[7]
-		u32 _pad1 : 20; //not used / zero
-		u32 NZCV  : 4;  //Bits [31:28]
-	} PSR;
-
-	u32 I;
-} reg_pair;
 
 //bool arm_FiqPending; -- not used , i use the input directly :)
 //bool arm_IrqPending;
@@ -847,7 +766,7 @@ template<u32 I>
 void DYNACALL DoLDM(u32 addr, u32 mask)
 {
 
-#if HOST_CPU==CPU_X86
+#if HOST_CPU==CPU_X86 && FEAT_AREC != DYNAREC_NONE
 	addr=virt_arm_reg(0);
 	mask=virt_arm_reg(1);
 #endif
@@ -1309,7 +1228,7 @@ u32 nfb,ffb,bfb,mfb;
 
 
 
-#if (HOST_CPU == CPU_X86)
+#if (HOST_CPU == CPU_X86) && FEAT_AREC != DYNAREC_NONE
 
 /* X86 backend
  * Uses a mix of
@@ -1460,6 +1379,7 @@ void armv_prof(OpType opt,u32 op,u32 flags)
 	}
 }
 
+#ifndef _WIN32
 naked void DYNACALL arm_compilecode()
 {
 	__asm
@@ -1511,6 +1431,8 @@ naked void arm_exit()
 		ret
 	}
 }
+#endif
+
 #elif	(HOST_CPU == CPU_ARM)
 
 /*
@@ -1644,7 +1566,7 @@ void arm_Run(u32 CycleCount)
 		//lookup code at armNextPC, run a block & remove its cycles from the timeslice
 		clktks-=EntryPoints[(armNextPC & ARAM_MASK)/4]();
 		
-		#if HOST_CPU==CPU_X86
+#if HOST_CPU==CPU_X86 && FEAT_AREC != DYNAREC_NONE
 			verify(armNextPC<=ARAM_MASK);
 		#endif
 	} while(clktks>0);
@@ -1689,7 +1611,7 @@ void MemOperand2(eReg dst,bool I, bool U,u32 offs, u32 opcd)
 template<u32 Pd>
 void DYNACALL MSR_do(u32 v)
 {
-#if HOST_CPU==CPU_X86
+#if HOST_CPU==CPU_X86 && FEAT_AREC != DYNAREC_NONE
 	v=virt_arm_reg(r0);
 #endif
 	if (Pd)
@@ -1748,7 +1670,7 @@ extern "C" void CompileCode()
 		//Read opcode ...
 		u32 opcd=CPUReadMemoryQuick(pc);
 
-#if HOST_CPU==CPU_X86
+#if HOST_CPU==CPU_X86 && FEAT_AREC != DYNAREC_NONE
 		//Sanity check: Stale cache
 		armv_check_cache(opcd,pc);
 #endif
@@ -1771,13 +1693,13 @@ extern "C" void CompileCode()
 					armv_imm_to_reg(15,pc+8);
 
 				else*/
-					#if HOST_CPU==CPU_X86
+#if HOST_CPU==CPU_X86 && FEAT_AREC != DYNAREC_NONE
 					armv_imm_to_reg(15,rand());
 #endif
 
 				VirtualizeOpcode(opcd,op_flags,pc);
 
-#if HOST_CPU==CPU_X86
+#if HOST_CPU==CPU_X86 && FEAT_AREC != DYNAREC_NONE
 				armv_imm_to_reg(15,rand());
 #endif
 			}
@@ -2029,14 +1951,14 @@ extern "C" void CompileCode()
 				if (op_flags & OP_SETS_PC)
 					armv_imm_to_reg(R15_ARM_NEXT,pc+4);
 
-				#if HOST_CPU==CPU_X86
+#if HOST_CPU==CPU_X86 && FEAT_AREC != DYNAREC_NONE
 					if ( !(op_flags & OP_SETS_PC) )
 						armv_imm_to_reg(R15_ARM_NEXT,pc+4);
 				#endif
 
 				armv_intpr(opcd);
 
-#if HOST_CPU==CPU_X86
+#if HOST_CPU==CPU_X86 && FEAT_AREC != DYNAREC_NONE
 				if ( !(op_flags & OP_SETS_PC) )
 				{
 					//Sanity check: next pc
@@ -2057,7 +1979,7 @@ extern "C" void CompileCode()
 		//Lets say each opcode takes 9 cycles for now ..
 		Cycles+=9;
 
-#if HOST_CPU==CPU_X86
+#if HOST_CPU==CPU_X86 && FEAT_AREC != DYNAREC_NONE
 		armv_imm_to_reg(15,0xF87641FF);
 
 		armv_prof(opt,opcd,op_flags);

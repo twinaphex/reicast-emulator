@@ -1,6 +1,7 @@
 #include "deps/xbyak/xbyak.h"
 
 #include "types.h"
+#include <set>
 
 #if FEAT_SHREC == DYNAREC_JIT && HOST_CPU == CPU_X64
 #include "hw/sh4/sh4_opcode_list.h"
@@ -58,11 +59,6 @@ void ngen_mainloop(void* v_cntx)
 RuntimeBlockInfo* ngen_AllocateBlock(void)
 {
    return new DynaRBI();
-}
-
-u32* GetRegPtr(u32 reg)
-{
-	return Sh4_int_GetRegisterPtr((Sh4RegType)reg);
 }
 
 void ngen_blockcheckfail(u32 pc) {
