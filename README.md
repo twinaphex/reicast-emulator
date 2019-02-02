@@ -1,5 +1,14 @@
 reicast
 ===========
+
+SUN SoC Version
+
+Allwinner H2/H3 platform=sun8i
+Allwinner A64/H5 platform=sun50i
+
+
+reicast
+===========
 reicast is a multi-platform Sega Dreamcast emulator.
 
 This is a developer-oriented resource, if you just want bins head over to http://reicast.com/
