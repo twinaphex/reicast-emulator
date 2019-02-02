@@ -4,6 +4,7 @@ reicast sunXXi
 SUN SoC Version
 
 Allwinner H2/H3 platform=sun8i
+
 Allwinner A64/H5 platform=sun50i
 
 
