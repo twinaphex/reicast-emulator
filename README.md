@@ -1,4 +1,4 @@
-reicast
+reicast sunXXi
 ===========
 
 SUN SoC Version
