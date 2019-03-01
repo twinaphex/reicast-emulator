@@ -1,6 +1,7 @@
 /*
 	In case you wonder, the extern "C" stuff are for the assembly code on beagleboard/pandora
 */
+#include <map>
 #include "types.h"
 #include "decoder.h"
 #include <set>
@@ -73,6 +74,7 @@ struct RuntimeBlockInfo: RuntimeBlockInfo_Core
 
 	u32 memops;
 	u32 linkedmemops;
+	std::map<void*, u32> memory_accesses;	// key is host pc when access is made, value is opcode id
 };
 
 struct CachedBlockInfo: RuntimeBlockInfo_Core
@@ -133,7 +135,7 @@ typedef std::set<RuntimeBlockInfo*,BlockMapCMP> blkmap_t;
 
 void bm_WriteBlockMap(const string& file);
 
-extern "C" DynarecCodeEntryPtr DYNACALL bm_GetCode(u32 addr);
+extern "C" __attribute__((used)) DynarecCodeEntryPtr DYNACALL bm_GetCode(u32 addr);
 
 RuntimeBlockInfo* bm_GetBlock2(void* dynarec_code);
 RuntimeBlockInfo* bm_GetStaleBlock(void* dynarec_code);

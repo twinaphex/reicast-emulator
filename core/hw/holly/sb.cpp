@@ -11,6 +11,7 @@
 #include "hw/gdrom/gdrom_if.h"
 #include "hw/maple/maple_if.h"
 #include "hw/aica/aica_if.h"
+#include "hw/modem/modem.h"
 
 #include "hw/naomi/naomi.h"
 
@@ -134,7 +135,7 @@ void sbio_write_noacc(u32 addr, u32 data) { verify(false); }
 void sbio_write_const(u32 addr, u32 data) { verify(false); }
 
 void sb_write_zero(u32 addr, u32 data) { verify(data==0); }
-void sb_write_gdrom_unlock(u32 addr, u32 data) { verify(data==0 || data==0x001fffff || data==0x42fe); } /* CS writes 0x42fe*/
+void sb_write_gdrom_unlock(u32 addr, u32 data) { verify(data==0 || data==0x001fffff || data==0x42fe || data == 0xa677); } /* CS writes 0x42fe, AtomisWave 0xa677 */
 
 
 void sb_rio_register(u32 reg_addr, RegIO flags, RegReadAddrFP* rf, RegWriteAddrFP* wf)
@@ -766,7 +767,7 @@ void sb_Init(void)
 
 	asic_reg_Init();
 
-   if (settings.System == DC_PLATFORM_NAOMI)
+   if (settings.System != DC_PLATFORM_DREAMCAST)
       naomi_reg_Init();
    else
       gdrom_reg_Init();
@@ -774,12 +775,15 @@ void sb_Init(void)
 	pvr_sb_Init();
 	maple_Init();
 	aica_sb_Init();
+
+   if (settings.System == DC_PLATFORM_DREAMCAST)
+      ModemInit();
 }
 
 void sb_Reset(bool Manual)
 {
 	asic_reg_Reset(Manual);
-   if (settings.System == DC_PLATFORM_NAOMI)
+   if (settings.System != DC_PLATFORM_DREAMCAST)
       naomi_reg_Reset(Manual);
    else
       gdrom_reg_Reset(Manual);
@@ -793,7 +797,7 @@ void sb_Term(void)
 	aica_sb_Term();
 	maple_Term();
 	pvr_sb_Term();
-   if (settings.System == DC_PLATFORM_NAOMI)
+   if (settings.System != DC_PLATFORM_DREAMCAST)
       naomi_reg_Term();
    else
       gdrom_reg_Term();

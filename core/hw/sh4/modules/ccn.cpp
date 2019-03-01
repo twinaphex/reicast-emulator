@@ -73,7 +73,9 @@ void CCN_CCR_write(u32 addr, u32 value)
 #ifndef NDEBUG
 		printf("Sh4: i-cache invalidation %08X\n",curr_pc);
 #endif
-		sh4_cpu.ResetCache();
+		// Shikigami No Shiro II sets ICI frequently
+		// No reason to flush the dynarec cache for this
+		//sh4_cpu.ResetCache();
 	}
 
 	temp.ICI=0;
@@ -81,6 +83,17 @@ void CCN_CCR_write(u32 addr, u32 value)
 
 	CCN_CCR=temp;
 }
+
+static u32 CPU_VERSION_read(u32 addr)
+{
+	return 0x040205c1;	// this is what a real SH7091 in a Dreamcast returns - the later Naomi BIOSes check and care!
+}
+
+static u32 CCN_PRR_read(u32 addr)
+{
+	return 0;
+}
+
 //Init/Res/Term
 void ccn_init()
 {
@@ -117,6 +130,9 @@ void ccn_init()
 	//CCN INTEVT 0xFF000028 0x1F000028 32 Undefined Undefined Held Held Iclk
 	sh4_rio_reg(CCN,CCN_INTEVT_addr,RIO_DATA,32);
 
+	// CPU VERSION 0xFF000030 0x1F000030 (undocumented)
+	sh4_rio_reg(CCN,CPU_VERSION_addr, RIO_RO_FUNC, 32, &CPU_VERSION_read, 0);
+
 	//CCN PTEA 0xFF000034 0x1F000034 32 Undefined Undefined Held Held Iclk
 	sh4_rio_reg(CCN,CCN_PTEA_addr,RIO_DATA,32);
 
@@ -125,6 +141,10 @@ void ccn_init()
 
 	//CCN QACR1 0xFF00003C 0x1F00003C 32 Undefined Undefined Held Held Iclk
 	sh4_rio_reg(CCN,CCN_QACR1_addr,RIO_WF,32,0,&CCN_QACR_write<1>);
+
+	// CCN PRR 0xFF000044 0x1F000044 (undocumented)
+	sh4_rio_reg(CCN,CCN_PRR_addr, RIO_RO_FUNC, 32, &CCN_PRR_read, 0);
+
 }
 
 void ccn_reset()

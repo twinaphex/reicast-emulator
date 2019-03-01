@@ -13,9 +13,8 @@ enum MapleDeviceType
 
    MDT_NaomiJamma,
 
+   MDT_None,
    MDT_Count,
-
-   MDT_None = -1
 };
 
 enum NAOMI_KEYS
@@ -36,11 +35,35 @@ enum NAOMI_KEYS
 	NAOMI_BTN5_KEY = 1 << 4,
 	NAOMI_BTN6_KEY = 1 << 3,
 	NAOMI_BTN7_KEY = 1 << 2,
+	NAOMI_BTN8_KEY = 1 << 16,
 
-	NAOMI_TEST_KEY = 1 << 16,
+	NAOMI_TEST_KEY = 1 << 1,
 
 	// Not an actual button
 	NAOMI_COIN_KEY = 1 << 0,
+};
+
+enum AWAVE_KEYS
+{
+	AWAVE_START_KEY = 1 << 3,
+
+	AWAVE_BTN0_KEY  = 1 << 2,
+	AWAVE_BTN1_KEY  = 1 << 1,
+	AWAVE_BTN2_KEY  = 1 << 0,
+	AWAVE_BTN3_KEY  = 1 << 10,
+	AWAVE_BTN4_KEY  = 1 << 9,
+
+	AWAVE_UP_KEY    = 1 << 4,
+	AWAVE_DOWN_KEY  = 1 << 5,
+	AWAVE_LEFT_KEY  = 1 << 6,
+	AWAVE_RIGHT_KEY = 1 << 7,
+
+	AWAVE_SERVICE_KEY = 1 << 13,
+	AWAVE_TEST_KEY 	  = 1 << 14,
+
+	// Not an actual button
+	AWAVE_COIN_KEY    = 1 << 15,
+	AWAVE_TRIGGER_KEY    = 1 << 12,
 };
 
 struct IMapleConfigMap;
@@ -64,13 +87,6 @@ struct maple_device
 	virtual bool maple_unserialize(void **data, unsigned int *total_size){return true;};
 	virtual MapleDeviceType get_device_type() = 0;
 	virtual void get_lightgun_pos() {};
-};
-
-struct _NaomiState
-{
-	u8 Cmd;
-	u8 Mode;
-	u8 Node;
 };
 
 maple_device* maple_Create(MapleDeviceType type);

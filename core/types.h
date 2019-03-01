@@ -379,15 +379,35 @@ using namespace std;
 //basic includes
 #include "stdclass.h"
 
-#define EMUERROR(x)( printf("Error in %s:" "%s" ":%d  -> " x "\n", __FILE__,__FUNCTION__ ,__LINE__ ))
-#define EMUERROR2(x,a)(printf("Error in %s:" "%s" ":%d  -> " x "\n)",__FILE__,__FUNCTION__,__LINE__,a))
-#define EMUERROR3(x,a,b)(printf("Error in %s:" "%s" ":%d  -> " x "\n)",__FILE__,__FUNCTION__,__LINE__,a,b))
-#define EMUERROR4(x,a,b,c)(printf("Error in %s:" "%s" ":%d  -> " x "\n",__FILE__,__FUNCTION__,__LINE__,a,b,c))
+#ifdef _ANDROID
+#include <android/log.h>
 
-#define EMUWARN(x)(printf(      "Warning in %s:" "%s" ":%d  -> " x "\n"),__FILE__,__FUNCTION__,__LINE__))
-#define EMUWARN2(x,a)(printf(   "Warning in %s:" "%s" ":%d  -> " x "\n"),__FILE__,__FUNCTION__,__LINE__,a))
-#define EMUWARN3(x,a,b)(printf( "Warning in %s:" "%s" ":%d  -> " x "\n"),__FILE__,__FUNCTION__,__LINE__,a,b))
-#define EMUWARN4(x,a,b,c)(printf("Warning in %s:" "%s" ":%d  -> " x "\n"),__FILE__,__FUNCTION__,__LINE__,a,b,c))
+#ifdef printf
+#undef printf
+#endif
+
+#ifdef puts
+#undef puts
+#endif
+
+#define LOG_TAG   "lr-reicast"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN,LOG_TAG,__VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG,LOG_TAG,__VA_ARGS__)
+#define puts      LOGI
+#define printf    LOGI
+#define putinf    LOGI
+#endif
+
+#ifndef RELEASE
+#define EMUERROR(format, ...) printf("Error in %s:%s:%d: " format "\n", __FILE__,__FUNCTION__ ,__LINE__, ##__VA_ARGS__)
+#else
+#define EMUERROR(...)
+#endif
+#define EMUERROR2 EMUERROR
+#define EMUERROR3 EMUERROR
+#define EMUERROR4 EMUERROR
 
 #define _X_x_X_MMU_VER_STR ""
 
@@ -420,7 +440,7 @@ void os_DebugBreak(void);
 #ifndef NO_VERIFY
 #define verify(x) if((x)==false){ msgboxf("Verify Failed  : " #x "\n in %s -> %s : %d \n",MBX_ICONERROR,(__FUNCTION__),(__FILE__),__LINE__); dbgbreak;}
 #else
-#define verify(x) (x);
+#define verify(x) if((x)==false){ msgboxf("Verify Failed  : " #x "\n in %s -> %s : %d \n",MBX_ICONERROR,(__FUNCTION__),(__FILE__),__LINE__); }
 #endif
 
 #define die(reason) { msgboxf("Fatal error : %s\n in %s -> %s : %d \n",MBX_ICONERROR,(reason),(__FUNCTION__),(__FILE__),__LINE__); dbgbreak;}
@@ -522,6 +542,8 @@ struct settings_t
       bool AutoExtraDepthScale;
       f32 ExtraDepthScale;
 		bool ThreadedRendering;
+		bool CustomTextures;
+		bool DumpTextures;
 	} rend;
 
 	struct
@@ -542,10 +564,11 @@ struct settings_t
 
 	struct
 	{
-		u32 cable;
-		u32 RTC;
-		u32 region;
-		u32 broadcast;
+	   u32 cable;			// 0 -> VGA, 1 -> VGA, 2 -> RGB, 3 -> TV
+	   u32 RTC;
+	   u32 region;			// 0 -> JP, 1 -> USA, 2 -> EU, 3 -> default
+	   u32 broadcast;		// 0 -> NTSC, 1 -> PAL, 2 -> PAL/M, 3 -> PAL/N, 4 -> default
+	   u32 language;		// 0 -> JP, 1 -> EN, 2 -> DE, 3 -> FR, 4 -> SP, 5 -> IT, 6 -> default
 	} dreamcast;
 
 	struct
@@ -701,8 +724,8 @@ s32 libExtDevice_Init(void);
 void libExtDevice_Reset(bool M);
 void libExtDevice_Term(void);
 
-static u32  libExtDevice_ReadMem_A0_006(u32 addr,u32 size) { return 0; }
-static void libExtDevice_WriteMem_A0_006(u32 addr,u32 data,u32 size) { }
+u32  libExtDevice_ReadMem_A0_006(u32 addr,u32 size);
+void libExtDevice_WriteMem_A0_006(u32 addr,u32 data,u32 size);
 
 //Area 0 , 0x01000000- 0x01FFFFFF	[Ext. Device]
 static u32 libExtDevice_ReadMem_A0_010(u32 addr,u32 size) { return 0; }
@@ -757,6 +780,7 @@ void os_MakeExecutable(void* ptr, u32 sz);
 
 void os_DoEvents();
 void os_CreateWindow();
+double os_GetSeconds();
 
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -778,7 +802,7 @@ void os_DebugBreak(void);
 bool ra_serialize(void *src, unsigned int src_size, void **dest, unsigned int *total_size) ;
 bool ra_unserialize(void *src, unsigned int src_size, void **dest, unsigned int *total_size);
 bool dc_serialize(void **data, unsigned int *total_size);
-bool dc_unserialize(void **data, unsigned int *total_size);
+bool dc_unserialize(void **data, unsigned int *total_size, size_t actual_data_size);
 
 #define LIBRETRO_S(v) ra_serialize(&(v), sizeof(v), data, total_size)
 #define LIBRETRO_US(v) ra_unserialize(&(v), sizeof(v), data, total_size)

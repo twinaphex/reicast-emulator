@@ -136,6 +136,7 @@
 #define CPU_MIPS     0x20000003
 #define CPU_X64      0x20000004
 #define CPU_GENERIC  0x20000005 //used for pnacl, emscripten, etc
+#define CPU_ARM64    0x20000006
 
 //FEAT_SHREC, FEAT_AREC, FEAT_DSPREC
 #define DYNAREC_NONE	0x40000001
@@ -165,6 +166,10 @@
 #elif defined(TARGET_LINUX_ARMELv7)
 #ifndef HOST_CPU
 #define HOST_CPU CPU_ARM
+#endif
+#elif defined(TARGET_LINUX_ARMv8)
+#ifndef HOST_CPU
+#define HOST_CPU CPU_ARM64
 #endif
 #elif defined(TARGET_LINUX_x86)
 #ifndef HOST_CPU
@@ -220,8 +225,7 @@
 #endif
 
 #ifndef FEAT_AREC
-	//#if HOST_CPU == CPU_ARM || HOST_CPU == CPU_X86
-	#if HOST_CPU == CPU_ARM
+	#if HOST_CPU == CPU_ARM || HOST_CPU == CPU_ARM64
 		#define FEAT_AREC DYNAREC_JIT
 	#else
 		#define FEAT_AREC DYNAREC_NONE
@@ -229,7 +233,7 @@
 #endif
 
 #ifndef FEAT_DSPREC
-	#if HOST_CPU == CPU_X86
+	#if HOST_CPU == CPU_X86 || HOST_CPU == CPU_ARM64
 		#define FEAT_DSPREC DYNAREC_JIT
 	#else
 		#define FEAT_DSPREC DYNAREC_NONE

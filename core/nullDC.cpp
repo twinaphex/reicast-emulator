@@ -77,7 +77,7 @@ s32 plugins_Init(char *s, size_t len)
 
    if (s32 rv = libGDR_Init())
       return rv;
-   if (settings.System == DC_PLATFORM_NAOMI)
+   if (settings.System != DC_PLATFORM_DREAMCAST)
    {
       if (!naomi_cart_SelectFile(s, len))
          return rv_serror;
@@ -191,6 +191,11 @@ static void LoadSpecialSettings(void)
             log_cb(RETRO_LOG_INFO, "[Hack]: Applying Disable DIV hack.\n");
             settings.dynarec.DisableDivMatching = lut_games[i].disable_div;
          }
+         if (lut_games[i].extra_depth_scale != 1 && settings.rend.AutoExtraDepthScale)
+         {
+            log_cb(RETRO_LOG_INFO, "[Hack]: Applying auto extra depth scale.\n");
+        	settings.rend.ExtraDepthScale = lut_games[i].extra_depth_scale;
+         }
 
          break;
       }
@@ -252,10 +257,16 @@ static void LoadSpecialSettingsNaomi(const char *name)
             settings.mapping.JammaSetup = lut_games_naomi[i].jamma_setup;
          }
 
-         if (lut_games_naomi[i].extra_depth_scaling != -1 && settings.rend.AutoExtraDepthScale)
+         if (lut_games_naomi[i].extra_depth_scale != 1 && settings.rend.AutoExtraDepthScale)
          {
             log_cb(RETRO_LOG_INFO, "[Hack]: Applying auto extra depth scale.\n");
-            settings.rend.ExtraDepthScale = 1e26;
+            settings.rend.ExtraDepthScale = lut_games_naomi[i].extra_depth_scale;
+         }
+
+         if (lut_games_naomi[i].game_inputs != NULL)
+         {
+            log_cb(RETRO_LOG_INFO, "Setting custom input descriptors\n");
+        	naomi_game_inputs = lut_games_naomi[i].game_inputs;
          }
 
          break;
@@ -277,6 +288,7 @@ void dc_prepare_system(void)
          ARAM_SIZE         = (2*1024*1024);
          VRAM_SIZE         = (8*1024*1024);
          sys_nvmem_flash.Allocate(FLASH_SIZE);
+         sys_rom.Allocate(BIOS_SIZE);
          break;
       case DC_PLATFORM_DEV_UNIT:
          //Devkit : 32 mb ram, 8? mb vram, 2? mb aram, 2? mb bios, ? flash
@@ -286,6 +298,7 @@ void dc_prepare_system(void)
          ARAM_SIZE         = (2*1024*1024);
          VRAM_SIZE         = (8*1024*1024);
          sys_nvmem_flash.Allocate(FLASH_SIZE);
+         sys_rom.Allocate(BIOS_SIZE);
          break;
       case DC_PLATFORM_NAOMI:
          //Naomi : 32 mb ram, 16 mb vram, 8 mb aram, 2 mb bios, ? flash
@@ -294,6 +307,7 @@ void dc_prepare_system(void)
          ARAM_SIZE         = (8*1024*1024);
          VRAM_SIZE         = (16*1024*1024);
          sys_nvmem_sram.Allocate(BBSRAM_SIZE);
+         sys_rom.Allocate(BIOS_SIZE);
          break;
       case DC_PLATFORM_NAOMI2:
          //Naomi2 : 32 mb ram, 16 mb vram, 8 mb aram, 2 mb bios, ? flash
@@ -302,22 +316,33 @@ void dc_prepare_system(void)
          ARAM_SIZE         = (8*1024*1024);
          VRAM_SIZE         = (16*1024*1024);
          sys_nvmem_sram.Allocate(BBSRAM_SIZE);
+         sys_rom.Allocate(BIOS_SIZE);
          break;
       case DC_PLATFORM_ATOMISWAVE:
-         //Atomiswave : 16(?) mb ram, 16 mb vram, 8 mb aram, 64kb bios, 64k flash
-         FLASH_SIZE        = (64*1024);
-         BIOS_SIZE         = (64*1024);
+         //Atomiswave : 16 mb ram, 8 mb vram, 8 mb aram, 128kb bios+flash, 128k BBSRAM
+         FLASH_SIZE        = 0;
+         BIOS_SIZE         = (128*1024);
          RAM_SIZE          = (16*1024*1024);
          ARAM_SIZE         = (8*1024*1024);
-         VRAM_SIZE         = (16*1024*1024);
-         sys_nvmem_flash.Allocate(FLASH_SIZE);
+         VRAM_SIZE         = (8*1024*1024);
+         BBSRAM_SIZE       = (128*1024);
+         sys_nvmem_flash.Allocate(BIOS_SIZE);
+         sys_nvmem_flash.write_protect_size = BIOS_SIZE / 2;
+         sys_nvmem_sram.Allocate(BBSRAM_SIZE);
          break;
    }
 
-   sys_rom.Allocate(BIOS_SIZE);
    RAM_MASK         = (RAM_SIZE-1);
    ARAM_MASK        = (ARAM_SIZE-1);
    VRAM_MASK        = (VRAM_SIZE-1);
+}
+
+void dc_reset()
+{
+	plugins_Reset(false);
+	mem_Reset(false);
+
+	sh4_cpu.Reset(false);
 }
 
 int dc_init(int argc,wchar* argv[])
@@ -367,16 +392,14 @@ int dc_init(int argc,wchar* argv[])
 	sh4_cpu.Init();
 	mem_Init();
 
-	plugins_Init(name, sizeof(name));
+	if (plugins_Init(name, sizeof(name)))
+	   return -4;
 	
 	mem_map_default();
 
 	mcfg_CreateDevices();
 
-	plugins_Reset(false);
-	mem_Reset(false);
-	
-	sh4_cpu.Reset(false);
+	dc_reset();
 
    const char* bootfile = reios_locate_ip();
    if (!bootfile || !reios_locate_bootfile("1ST_READ.BIN"))
@@ -387,8 +410,9 @@ int dc_init(int argc,wchar* argv[])
       case DC_PLATFORM_DREAMCAST:
          LoadSpecialSettings();
          break;
+      case DC_PLATFORM_ATOMISWAVE:
       case DC_PLATFORM_NAOMI:
-         LoadSpecialSettingsNaomi(name);
+         LoadSpecialSettingsNaomi(naomi_game_id);
          break;
    }
 
@@ -427,7 +451,7 @@ bool dc_is_running()
 
 void LoadSettings(void)
 {
-	settings.dynarec.Enable			= 1;
+   settings.dynarec.Enable			= 1;
 	settings.dynarec.idleskip		= 1;
 	settings.dynarec.unstable_opt	= 0; 
    //settings.dynarec.DisableDivMatching       = 0;
@@ -451,16 +475,17 @@ void LoadSettings(void)
    settings.rend.RenderToTextureBuffer  = false;
    settings.rend.RenderToTexture        = true;
    settings.rend.RenderToTextureUpscale = 1;
-	settings.rend.MaxFilteredTextureSize = 256;
+   settings.rend.MaxFilteredTextureSize = 256;
+   settings.pvr.SynchronousRendering	 = 0;
 #endif
-   if (settings.rend.ExtraDepthScale == 0)
-      settings.rend.ExtraDepthScale = 1.f;
+   settings.rend.AutoExtraDepthScale    = true;
+   settings.rend.ExtraDepthScale        = 1.f;
+
    settings.rend.Clipping               = true;
 
 
    settings.rend.ModifierVolumes        = true;
    settings.rend.TranslucentPolygonDepthMask = false;
-	settings.pvr.SynchronousRendering	 = 0;
 
 	settings.debug.SerialConsole         = 0;
 

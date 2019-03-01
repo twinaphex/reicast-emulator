@@ -21,13 +21,18 @@ Plugins:
 		ImageUpdate(data);
 */
 void UpdateInputState(u32 port);
-void UpdateVibration(u32 port, u32 value);
+void UpdateVibration(u32 port, u32 value, u32 max_duration);
 
-extern u16 kcode[4];
-extern u32 vks[4];
-extern s8 joyx[4],joyy[4];
+extern u32 kcode[4];
+extern s8 joyx[4], joyy[4], joyrx[4], joyry[4];
 extern u8 rt[4],lt[4];
 extern bool enable_purupuru;
+extern f32 mo_x_abs[4];
+extern f32 mo_y_abs[4];
+extern u32 mo_buttons[4];
+extern f32 mo_x_delta[4];
+extern f32 mo_y_delta[4];
+extern f32 mo_wheel_delta[4];
 
 const char* VMU_SCREEN_COLOR_NAMES[VMU_NUM_COLORS] = {
 		"DEFAULT_ON",
@@ -96,6 +101,7 @@ vmu_screen_params_t vmu_screen_params[4] ;
 
 MapleDeviceType maple_devices[MAPLE_PORTS] =
    { MDT_SegaController, MDT_SegaController, MDT_SegaController, MDT_SegaController };
+bool use_lightgun = false;	// Naomi only
 
 u8 GetBtFromSgn(s8 val)
 {
@@ -105,38 +111,63 @@ u8 GetBtFromSgn(s8 val)
 struct MapleConfigMap : IMapleConfigMap
 {
 	maple_device* dev;
+	int player_num;
 
-	MapleConfigMap(maple_device* dev)
+	MapleConfigMap(maple_device* dev, int player_num = -1)
 	{
 		this->dev=dev;
+		this->player_num = player_num;
 	}
 
-   void SetVibration(u32 value)
+   void SetVibration(u32 value, u32 max_duration)
    {
-      UpdateVibration(dev->bus_id, value);
+      UpdateVibration(player_num == -1 ? dev->bus_id : player_num, value, max_duration);
    }
 
 	void GetInput(PlainJoystickState* pjs)
 	{
-		UpdateInputState(dev->bus_id);
+	   int pnum = player_num == -1 ? dev->bus_id : player_num;
+	   UpdateInputState(pnum);
 
-		pjs->kcode=kcode[dev->bus_id] | 0xF901;
-		pjs->joy[PJAI_X1]=GetBtFromSgn(joyx[dev->bus_id]);
-		pjs->joy[PJAI_Y1]=GetBtFromSgn(joyy[dev->bus_id]);
-		pjs->trigger[PJTI_R]=rt[dev->bus_id];
-		pjs->trigger[PJTI_L]=lt[dev->bus_id];
+	   pjs->kcode=kcode[pnum];
+	   if (settings.System == DC_PLATFORM_DREAMCAST)
+		  pjs->kcode |= 0xF901;
+	   pjs->joy[PJAI_X1]=GetBtFromSgn(joyx[pnum]);
+	   pjs->joy[PJAI_Y1]=GetBtFromSgn(joyy[pnum]);
+	   pjs->joy[PJAI_X2]=GetBtFromSgn(joyrx[pnum]);
+	   pjs->joy[PJAI_Y2]=GetBtFromSgn(joyry[pnum]);
+	   pjs->trigger[PJTI_R]=rt[pnum];
+	   pjs->trigger[PJTI_L]=lt[pnum];
 	}
 	void SetImage(void* img)
 	{
-		vmu_screen_params[dev->bus_id].vmu_screen_needs_update = true ;
+		vmu_screen_params[player_num == -1 ? dev->bus_id : player_num].vmu_screen_needs_update = true ;
+	}
+	void GetAbsolutePosition(f32 *px, f32 *py)
+	{
+	   int pnum = player_num == -1 ? dev->bus_id : player_num;
+	   *px = mo_x_abs[pnum];
+	   *py = mo_y_abs[pnum];
+	}
+	void GetMouse(u32 *buttons, f32 *delta_x, f32 *delta_y, f32 *delta_wheel)
+	{
+	   int pnum = player_num == -1 ? dev->bus_id : player_num;
+	   *buttons = mo_buttons[pnum];
+	   *delta_x = mo_x_delta[pnum];
+	   *delta_y = mo_y_delta[pnum];
+	   *delta_wheel = mo_wheel_delta[pnum];
+
+	   mo_x_delta[pnum] = 0;
+	   mo_y_delta[pnum] = 0;
+	   mo_wheel_delta[pnum] = 0;
 	}
 };
 
-void mcfg_Create(MapleDeviceType type,u32 bus,u32 port)
+void mcfg_Create(MapleDeviceType type,u32 bus,u32 port, int player_num /* = -1 */)
 {
 	maple_device* dev=maple_Create(type);
 	dev->Setup(maple_GetAddress(bus,port));
-	dev->config = new MapleConfigMap(dev);
+	dev->config = new MapleConfigMap(dev, player_num);
 	dev->OnSetup();
 	MapleDevices[bus][port]=dev;
 }
@@ -183,9 +214,53 @@ void mcfg_CreateDevices()
 		 }
 	  }
    }
-   else
+   else if (settings.System == DC_PLATFORM_NAOMI)
    {
-      mcfg_Create(MDT_NaomiJamma, 0, 5);
+      use_lightgun = false;
+	  for (int i = 0; i < MAPLE_PORTS; i++)
+		 if (maple_devices[i] == MDT_LightGun)
+			use_lightgun = true;
+
+	  bus = 0;
+      mcfg_Create(MDT_NaomiJamma, bus++, 5);
+	  for (int i = 0; i < MAPLE_PORTS; i++)
+	  {
+		 switch (maple_devices[i])
+		 {
+		 case MDT_Keyboard:
+			mcfg_Create(MDT_Keyboard, bus++, 5);
+			break;
+		 default:
+			break;
+		 }
+	  }
+   }
+   else if (settings.System == DC_PLATFORM_ATOMISWAVE)
+   {
+	  mcfg_Create(MDT_SegaController, 0, 5);
+	  mcfg_Create(MDT_SegaController, 1, 5);
+	  switch (settings.mapping.JammaSetup)
+	  {
+	  case 5:
+		 // 2 players with analog axes
+		 mcfg_Create(MDT_SegaController, 2, 5, 0);
+		 mcfg_Create(MDT_SegaController, 3, 5, 1);
+		 break;
+	  case 6:
+		 // Light guns
+		 mcfg_Create(MDT_LightGun, 2, 5, 0);
+		 mcfg_Create(MDT_LightGun, 3, 5, 1);
+		 break;
+	  case 2:
+		 // Track-ball
+		 mcfg_Create(MDT_Mouse, 2, 5, 0);
+		 break;
+	  default:
+		 // 4 players
+		 mcfg_Create(MDT_SegaController, 2, 5);
+		 mcfg_Create(MDT_SegaController, 3, 5);
+		 break;
+	  }
    }
 }
 
@@ -198,6 +273,12 @@ void mcfg_DestroyDevices()
 			delete MapleDevices[i][j];
 			MapleDevices[i][j] = NULL;
 		}
+}
+
+void mcfg_DestroyDevice(int i, int j)
+{
+	delete MapleDevices[i][j];
+	MapleDevices[i][j] = NULL;
 }
 
 void mcfg_SerializeDevices(void **data, unsigned int *total_size)
@@ -226,12 +307,6 @@ void mcfg_SerializeDevices(void **data, unsigned int *total_size)
 
 void mcfg_UnserializeDevices(void **data, unsigned int *total_size)
 {
-	if (*data == NULL)
-	{
-		// Return the maximum size needed (8 vmus)
-		*total_size += *total_size + (128 * 1024 + 192 + 48 * 32) * 8 + MAPLE_PORTS * 6;
-		return;
-	}
 	mcfg_DestroyDevices();
 
 	for (int i = 0; i < MAPLE_PORTS; i++)

@@ -63,13 +63,13 @@ void main() \n\
 	vtx_offs1 = in_offs1; \n\
 	vtx_uv1 = in_uv1; \n\
 	vec4 vpos=in_pos; \n\
+	if (vpos.z < 0.0 || vpos.z > 3.4e37) \n\
+	{ \n\
+	   gl_Position = vec4(0.0, 0.0, 1.0, 1.0 / vpos.z); \n\
+	   return; \n\
+	} \n\
+	\n\
 	vpos.w = extra_depth_scale / vpos.z; \n\
-	if (abs(vpos.w) < 1.18e-10) \n\
-		vpos.w = 1.18e-10; \n\
-   if (vpos.w < 0.0) { \n\
-      gl_Position = vec4(0.0, 0.0, 0.0, vpos.w); \n\
-         return; \n\
-   } \n\
 	vpos.z = vpos.w; \n\
 	vpos.xy=vpos.xy*scale.xy-scale.zw;  \n\
 	vpos.xy*=vpos.w;  \n\
@@ -505,6 +505,8 @@ static void gl_term(void)
 	  delete it->second;
    }
    gl4.shaders.clear();
+   glDeleteTextures(1, &fbTextureId);
+   fbTextureId = 0;
 }
 
 static bool gl_create_resources(void)
@@ -999,8 +1001,6 @@ struct gl4rend : Renderer
 {
    bool Init()
    {
-	  glsm_ctl(GLSM_CTL_STATE_SETUP, NULL);
-
 	  int major = 0;
 	  int minor = 0;
 	  glGetIntegerv(GL_MAJOR_VERSION, &major);
@@ -1085,14 +1085,7 @@ struct gl4rend : Renderer
 		  glcache.DeleteTextures(1, &depthSaveTexId);
 		  depthSaveTexId = 0;
 	   }
-	   if (KillTex)
-	   {
-		  void killtex();
-		  killtex();
-		  printf("Texture cache cleared\n");
-	   }
-
-	   CollectCleanup();
+	   killtex();
 
 	   gl_term();
    }

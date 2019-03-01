@@ -387,8 +387,8 @@ public:
 				//32B
 			case ParamType_Object_List_Set:
 				{
+					printf("Unsupported list type: ParamType_Object_List_Set\n");
 
-					die("ParamType_Object_List_Set");
 					// *cough* ignore it :p
 					data+=SZ32;
 				}
@@ -507,6 +507,7 @@ public:
 
 			ta_type_lut[i]=rv;
 		}
+		VertexDataFP = NullVertexData;
 	}
 	/*
 	Volume,Col_Type,Texture,Offset,Gouraud,16bit_UV
@@ -1255,7 +1256,7 @@ public:
 	__forceinline
 		static void AppendSpriteVertexA(TA_Sprite1A* sv)
 	{
-		u16* idx=vdrc.idx.Append(6);
+		u32* idx = vdrc.idx.Append(6);
 		u32 vbase=vdrc.verts.used();
 
 		idx[0]=vbase+0;
@@ -1449,7 +1450,7 @@ public:
 
 		//allocate storage for BG poly
 		vd_rc.global_param_op.Append();
-		u16* idx=vd_rc.idx.Append(4);
+		u32* idx = vd_rc.idx.Append(4);
 		int vbase=vd_rc.verts.used();
 
 		idx[0]=vbase+0;

@@ -264,7 +264,8 @@ static void DrawList(const List<PolyParam>& gply, int first, int count)
       if (params->count>2) /* this actually happens for some games. No idea why .. */
       {
          SetGPState<Type,SortingEnabled>(params, 0);
-         glDrawElements(GL_TRIANGLE_STRIP, params->count, GL_UNSIGNED_SHORT, (GLvoid*)(2*params->first));
+         glDrawElements(GL_TRIANGLE_STRIP, params->count, gl.index_type,
+         					(GLvoid*)(gl.get_index_size() * params->first));
       }
 
       params++;
@@ -283,7 +284,7 @@ bool operator<(const PolyParam &left, const PolyParam &right)
 //Sort based on min-z of each strip
 void SortPParams(int first, int count)
 {
-   u16 *idx_base      = NULL;
+   u32 *idx_base      = NULL;
    Vertex *vtx_base   = NULL;
    PolyParam *pp      = NULL;
    PolyParam *pp_end  = NULL;
@@ -302,7 +303,7 @@ void SortPParams(int first, int count)
          pp->zvZ=0;
       else
       {
-         u16*      idx   = idx_base+pp->first;
+         u32*      idx   = idx_base+pp->first;
          Vertex*   vtx   = vtx_base+idx[0];
          Vertex* vtx_end = vtx_base + idx[pp->count-1]+1;
          u32 zv          = 0xFFFFFFFF;
@@ -334,7 +335,7 @@ float max3(float v0,float v1,float v2)
 	return max(max(v0,v1),v2);
 }
 
-float minZ(Vertex* v,u16* mod)
+float minZ(Vertex* v, u32* mod)
 {
 	return min(min(v[mod[0]].z,v[mod[1]].z),v[mod[2]].z);
 }
@@ -357,7 +358,7 @@ bool PP_EQ(PolyParam* pp0, PolyParam* pp1)
 
 static vector<SortTrigDrawParam>	pidx_sort;
 
-void fill_id(u16* d, Vertex* v0, Vertex* v1, Vertex* v2,  Vertex* vb)
+void fill_id(u32* d, Vertex* v0, Vertex* v1, Vertex* v2,  Vertex* vb)
 {
 	d[0]=v0-vb;
 	d[1]=v1-vb;
@@ -367,7 +368,7 @@ void fill_id(u16* d, Vertex* v0, Vertex* v1, Vertex* v2,  Vertex* vb)
 void GenSorted(int first, int count)
 {
    static vector<IndexTrig> lst;
-   static vector<u16> vidx_sort;
+   static vector<u32> vidx_sort;
 
    static u32 vtx_cnt;
    int idx            = -1;
@@ -379,7 +380,7 @@ void GenSorted(int first, int count)
       return;
 
    Vertex* vtx_base=pvrrc.verts.head();
-   u16* idx_base=pvrrc.idx.head();
+   u32* idx_base = pvrrc.idx.head();
 
    PolyParam* pp_base= &pvrrc.global_param_tr.head()[first];
    PolyParam* pp=pp_base;
@@ -406,7 +407,7 @@ void GenSorted(int first, int count)
    {
       Vertex *vtx     = NULL;
       Vertex *vtx_end = NULL;
-      u16 *idx        = NULL;
+      u32 *idx        = NULL;
       u32 flip        = 0;
       u32 ppid        = (pp-pp_base);
 
@@ -552,7 +553,7 @@ void GenSorted(int first, int count)
    {
       SortTrigDrawParam stdp;
       int   pid          = lst[i].pid;
-      u16* midx          = lst[i].id;
+      u32* midx          = lst[i].id;
 
       vidx_sort[i*3 + 0] = midx[0];
       vidx_sort[i*3 + 1] = midx[1];
@@ -562,7 +563,7 @@ void GenSorted(int first, int count)
          continue;
 
       stdp.ppid  = pp_base + pid;
-      stdp.first = (u16)(i*3);
+      stdp.first = i * 3;
       stdp.count = 0;
 
       if (idx!=-1)
@@ -591,7 +592,19 @@ void GenSorted(int first, int count)
    {
       /* Bind and upload sorted index buffer */
       glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl.vbo.idxs2);
-      glBufferData(GL_ELEMENT_ARRAY_BUFFER,vidx_sort.size()*2,&vidx_sort[0],GL_STREAM_DRAW);
+      if (gl.index_type == GL_UNSIGNED_SHORT)
+      {
+    	 static bool overrun;
+    	 static List<u16> short_vidx;
+    	 if (short_vidx.daty != NULL)
+    		short_vidx.Free();
+    	 short_vidx.Init(vidx_sort.size(), &overrun, NULL);
+    	 for (int i = 0; i < vidx_sort.size(); i++)
+    		*(short_vidx.Append()) = vidx_sort[i];
+    	 glBufferData(GL_ELEMENT_ARRAY_BUFFER, short_vidx.bytes(), short_vidx.head(), GL_STREAM_DRAW);
+      }
+      else
+    	 glBufferData(GL_ELEMENT_ARRAY_BUFFER, vidx_sort.size() * sizeof(u32), &vidx_sort[0], GL_STREAM_DRAW);
    }
 }
 
@@ -600,7 +613,6 @@ void DrawSorted(u32 count)
    //if any drawing commands, draw them
 	if (pidx_sort.size())
    {
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl.vbo.idxs2);
       u32 count=pidx_sort.size();
 
       {
@@ -616,7 +628,8 @@ void DrawSorted(u32 count)
             if (pidx_sort[p].count>2) //this actually happens for some games. No idea why ..
             {
                SetGPState<ListType_Translucent, true>(params, 0);
-               glDrawElements(GL_TRIANGLES, pidx_sort[p].count, GL_UNSIGNED_SHORT, (GLvoid*)(2*pidx_sort[p].first));
+               glDrawElements(GL_TRIANGLES, pidx_sort[p].count, gl.index_type,
+            		 (GLvoid*)(gl.get_index_size() * pidx_sort[p].first));
             }
             params++;
          }
@@ -645,7 +658,8 @@ void DrawSorted(u32 count)
 
 						SetCull(params->isp.CullMode ^ gcflip);
 
-						glDrawElements(GL_TRIANGLES, pidx_sort[p].count, GL_UNSIGNED_SHORT, (GLvoid*)(2 * pidx_sort[p].first));
+						glDrawElements(GL_TRIANGLES, pidx_sort[p].count, gl.index_type,
+							  (GLvoid*)(gl.get_index_size() * pidx_sort[p].first));
 					}
 				}
 				glcache.StencilMask(0xFF);
@@ -653,6 +667,8 @@ void DrawSorted(u32 count)
 			}
 
       }
+      // Re-bind the previous index buffer for subsequent render passes
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl.vbo.idxs);
    }
 }
 
@@ -895,13 +911,7 @@ void DrawStrips(void)
 
       //initial state
       glcache.Enable(GL_DEPTH_TEST);
-
-#if 0
-      glClearDepth(0.f);
-#endif
       glcache.DepthMask(GL_TRUE);
-      glcache.StencilMask(0xFF);
-      glClear(GL_DEPTH_BUFFER_BIT );
 
       //Opaque
       DrawList<ListType_Opaque, false>(pvrrc.global_param_op, 
@@ -912,7 +922,8 @@ void DrawStrips(void)
             previous_pass.pt_count, current_pass.pt_count - previous_pass.pt_count);
 
       // Modifier volumes
-      DrawModVols(previous_pass.mvo_count, current_pass.mvo_count - previous_pass.mvo_count);
+      if (gl.stencil_present)
+    	 DrawModVols(previous_pass.mvo_count, current_pass.mvo_count - previous_pass.mvo_count);
 
       //Alpha blended
       if (settings.pvr.Emulation.AlphaSortMode == 0)
@@ -977,9 +988,6 @@ void DrawFramebuffer(float w, float h)
 	glDrawElements(GL_TRIANGLE_STRIP, 5, GL_UNSIGNED_SHORT, (void *)0);
  	glcache.DeleteTextures(1, &fbTextureId);
 	fbTextureId = 0;
-
-   glBufferData(GL_ARRAY_BUFFER, pvrrc.verts.bytes(), pvrrc.verts.head(), GL_STREAM_DRAW);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, pvrrc.idx.bytes(), pvrrc.idx.head(), GL_STREAM_DRAW);
 }
 
 void UpdateVmuTexture(int vmu_screen_number)

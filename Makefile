@@ -9,7 +9,7 @@ NO_EXCEPTIONS := 0
 NO_NVMEM      := 0
 NO_VERIFY     := 1
 HAVE_LTCG     := 1
-HAVE_GENERIC_JIT   := 1
+HAVE_GENERIC_JIT := 1
 HAVE_GL3      := 0
 FORCE_GLES    := 0
 STATIC_LINKING:= 0
@@ -127,7 +127,7 @@ ifneq (,$(findstring unix,$(platform)))
 		CFLAGS += -DTARGET_LINUX_x64 -D TARGET_NO_AREC
 		SINGLE_PREC_FLAGS=1
 		CXXFLAGS += -fexceptions
-		HAVE_GENERIC_JIT   = 0
+		HAVE_GENERIC_JIT = 0
 	else ifeq ($(WITH_DYNAREC), x86)
 		CFLAGS += -m32 -D TARGET_LINUX_x86
 		SINGLE_PREC_FLAGS=1
@@ -135,7 +135,7 @@ ifneq (,$(findstring unix,$(platform)))
 		MFLAGS += -m32
 		ASFLAGS += --32
 		LDFLAGS += -m32
-		HAVE_GENERIC_JIT   = 0
+		HAVE_GENERIC_JIT = 0
 	endif
 
 	PLATFORM_EXT := unix
@@ -169,12 +169,14 @@ else ifneq (,$(findstring rpi,$(platform)))
 
 	PLATFORM_EXT := unix
 	WITH_DYNAREC=arm
+	HAVE_GENERIC_JIT = 0
+	CORE_DEFINES += -DLOW_END
 
-# Classic Platforms ####################
+# Classic Platforms #####################
 # Platform affix = classic_<ISA>_<µARCH>
 # Help at https://modmyclassic.com/comp
-
-# (armv7 a7, hard point, neon based) ### 
+#########################################
+# (armv7 a7, hard point, neon based) ####
 # NESC, SNESC, C64 mini 
 else ifeq ($(platform), classic_armv7_a7)
 	EXT    ?= so
@@ -211,8 +213,148 @@ else ifeq ($(platform), classic_armv7_a7)
 	endif
 	PLATFORM_EXT := unix
 	WITH_DYNAREC = arm
+	HAVE_GENERIC_JIT = 0
+	CORE_DEFINES += -DLOW_END -DLOW_RES
+#########################################
+# (armv8 a35, hard point, neon based) ###
+# PlayStation Classic
+else ifeq ($(platform), classic_armv8_a35)
+	EXT    ?= so
+	TARGET := $(TARGET_NAME)_libretro.$(EXT)
+	SHARED := -shared -Wl,--version-script=link.T
+	fpic = -fPIC
+	LIBS += -lrt
+	ARM_FLOAT_ABI_HARD = 1
+	FORCE_GLES = 1
+	SINGLE_PREC_FLAGS = 1
+	HAVE_LTCG = 0
+	HAVE_OPENMP = 0
+	CFLAGS += -Ofast \
+	-flto=4 -fwhole-program -fuse-linker-plugin \
+	-fdata-sections -ffunction-sections -Wl,--gc-sections \
+	-fno-stack-protector -fno-ident -fomit-frame-pointer \
+	-falign-functions=1 -falign-jumps=1 -falign-loops=1 \
+	-fno-unwind-tables -fno-asynchronous-unwind-tables -fno-unroll-loops \
+	-fmerge-all-constants -fno-math-errno \
+	-marm -mtune=cortex-a35 -mfpu=neon-fp-armv8 -mfloat-abi=hard
+	CXXFLAGS += $(CFLAGS)
+	ASFLAGS += $(CFLAGS)
+	LDFLAGS += -marm -mtune=cortex-a35 -mfpu=neon-fp-armv8 -mfloat-abi=hard
+	FORCE_GLES=1
+	ifeq ($(shell echo `$(CC) -dumpversion` "< 4.9" | bc -l), 1)
+		CFLAGS += -march=armv8-a
+		LDFLAGS += -march=armv8-a
+	else
+		CFLAGS += -march=armv8-a
+		LDFLAGS += -march=armv8-a
+		# If gcc is 5.0 or later
+		ifeq ($(shell echo `$(CC) -dumpversion` ">= 5" | bc -l), 1)
+			LDFLAGS += -static-libgcc -static-libstdc++
+		endif
+	endif
+	PLATFORM_EXT := unix
+	WITH_DYNAREC = arm
+	HAVE_GENERIC_JIT = 0
+	CORE_DEFINES += -DLOW_END -DLOW_RES
+#########################################
+
+# sun8i Allwinner H2+ / H3 
+# like Orange PI, Nano PI, Banana PI, Tritium
+else ifeq ($(platform), sun8i)
+	EXT    ?= so
+	TARGET := $(TARGET_NAME)_libretro.$(EXT)
+	SHARED := -shared -Wl,--version-script=link.T
+	fpic = -fPIC
+	LIBS += -lrt
+	ARM_FLOAT_ABI_HARD = 1
+	FORCE_GLES = 1
+	SINGLE_PREC_FLAGS = 1
+	HAVE_LTCG = 0
+	HAVE_OPENMP = 0
+	CFLAGS += -Ofast \
+	-flto=4 -fwhole-program -fuse-linker-plugin \
+	-fdata-sections -ffunction-sections -Wl,--gc-sections \
+	-fno-stack-protector -fno-ident -fomit-frame-pointer \
+	-falign-functions=1 -falign-jumps=1 -falign-loops=1 \
+	-fno-unwind-tables -fno-asynchronous-unwind-tables -fno-unroll-loops \
+	-fmerge-all-constants -fno-math-errno \
+	-marm -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard
+	CXXFLAGS += $(CFLAGS)
+	ASFLAGS += $(CFLAGS)
+	LDFLAGS += -marm -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard
+	ifeq ($(shell echo `$(CC) -dumpversion` "< 4.9" | bc -l), 1)
+		CFLAGS += -march=armv7-a
+		LDFLAGS += -march=armv7-a
+	else
+		CFLAGS += -march=armv7ve
+		LDFLAGS += -march=armv7ve
+		# If gcc is 5.0 or later
+		ifeq ($(shell echo `$(CC) -dumpversion` ">= 5" | bc -l), 1)
+			LDFLAGS += -static-libgcc -static-libstdc++
+		endif
+	endif
+	PLATFORM_EXT := unix
+	WITH_DYNAREC = arm
+	HAVE_GENERIC_JIT = 0
+	CORE_DEFINES += -DLOW_END
 #######################################
 
+# Odroid-N2
+else ifeq ($(platform), odroid-n2)
+	EXT ?= so
+	TARGET := $(TARGET_NAME)_libretro.$(EXT)
+	SHARED := -shared -Wl,--version-script=link.T
+	LDFLAGS +=  -Wl,--no-undefined
+	fpic = -fPIC
+	LIBS += -lrt
+	ARM_FLOAT_ABI_HARD = 0
+	FORCE_GLES = 1
+	SINGLE_PREC_FLAGS = 1
+	CPUFLAGS += -DHOST_CPU=0x20000006 -DTARGET_LINUX_ARMv8 -frename-registers
+	CFLAGS += -mcpu=cortex-a73 -mtune=cortex-a73.cortex-a53 $(CPUFLAGS)
+	CXXFLAGS += -mcpu=cortex-a73 -mtune=cortex-a73.cortex-a53 $(CPUFLAGS)
+	ASFLAGS += $(CFLAGS) -c -frename-registers -fno-strict-aliasing -ffast-math -ftree-vectorize
+	PLATFORM_EXT := unix
+	WITH_DYNAREC=arm64
+	HAVE_GENERIC_JIT = 0
+	HAVE_LTCG = 0
+
+# RockPro64
+else ifeq ($(platform), rockpro64)
+	EXT ?= so
+	TARGET := $(TARGET_NAME)_libretro.$(EXT)
+	SHARED := -shared -Wl,--version-script=link.T
+	fpic = -fPIC
+	LIBS += -lrt
+	ARM_FLOAT_ABI_HARD = 1
+	FORCE_GLES = 1
+	SINGLE_PREC_FLAGS = 1
+	CPUFLAGS += -DNO_ASM -DARM_ASM -frename-registers -ftree-vectorize
+	CFLAGS += -marm -mfloat-abi=hard -mcpu=cortex-a72 -mtune=cortex-a72.cortex-a53 -mfpu=neon-fp-armv8 -mvectorize-with-neon-quad $(CPUFLAGS)
+	CXXFLAGS += -marm -mfloat-abi=hard -mcpu=cortex-a72 -mtune=cortex-a72.cortex-a53 -mfpu=neon-fp-armv8 -mvectorize-with-neon-quad $(CPUFLAGS)
+	ASFLAGS += $(CFLAGS) -c -frename-registers -fno-strict-aliasing -ffast-math -ftree-vectorize
+	PLATFORM_EXT := unix
+	WITH_DYNAREC=arm
+	HAVE_GENERIC_JIT = 0
+
+# Tinkerboard
+else ifeq ($(platform), tinkerboard)
+    EXT ?= so
+    TARGET := $(TARGET_NAME)_libretro.$(EXT)
+    SHARED := -shared -Wl,--version-script=link.T
+    fpic = -fPIC
+    LIBS += -lrt
+    ARM_FLOAT_ABI_HARD = 1
+    FORCE_GLES = 1
+    SINGLE_PREC_FLAGS = 1
+    CPUFLAGS += -DNO_ASM -DARM_ASM -frename-registers -ftree-vectorize
+    CFLAGS += -marm -mfpu=neon-vfpv4 -mtune=cortex-a17 -mfloat-abi=hard $(CPUFLAGS)
+    CXXFLAGS += -marm -mfpu=neon-vfpv4 -mtune=cortex-a17 -mfloat-abi=hard $(CPUFLAGS)
+    ASFLAGS += $(CFLAGS) -c -frename-registers -fno-strict-aliasing -ffast-math -ftree-vectorize
+    PLATFORM_EXT := unix
+    WITH_DYNAREC=arm
+    HAVE_GENERIC_JIT = 0
+		
 # ODROIDs
 else ifneq (,$(findstring odroid,$(platform)))
 	EXT    ?= so
@@ -262,6 +404,7 @@ else ifneq (,$(findstring odroid,$(platform)))
 
 	PLATFORM_EXT := unix
 	WITH_DYNAREC=arm
+	HAVE_GENERIC_JIT = 0
 
 # i.MX6
 else ifneq (,$(findstring imx6,$(platform)))
@@ -274,6 +417,7 @@ else ifneq (,$(findstring imx6,$(platform)))
 	CPUFLAGS += -DNO_ASM
 	PLATFORM_EXT := unix
 	WITH_DYNAREC=arm
+	HAVE_GENERIC_JIT = 0
 
 # OS X
 else ifneq (,$(findstring osx,$(platform)))
@@ -293,8 +437,8 @@ else ifneq (,$(findstring osx,$(platform)))
 	# Target Dynarec
 	ifeq ($(ARCH), $(filter $(ARCH), ppc))
 		WITH_DYNAREC =
-        else
-                HAVE_GENERIC_JIT   = 0
+    else
+		HAVE_GENERIC_JIT = 0
 	endif
 	HAVE_OPENMP=0
 
@@ -350,6 +494,7 @@ else ifneq (,$(findstring theos_ios,$(platform)))
 	DEFINES += -DIOS
 	FORCE_GLES = 1
 	WITH_DYNAREC=arm
+	HAVE_GENERIC_JIT = 0
 
 	PLATCFLAGS += -DHAVE_POSIX_MEMALIGN -DNO_ASM
 	PLATCFLAGS += -DIOS -marm
@@ -365,6 +510,7 @@ else ifneq (,$(findstring android,$(platform)))
 	CC = arm-linux-androideabi-gcc
 	CXX = arm-linux-androideabi-g++
 	WITH_DYNAREC=arm
+	HAVE_GENERIC_JIT = 0
 	FORCE_GLES = 1
 	PLATCFLAGS += -DANDROID
 	CPUCFLAGS  += -DNO_ASM
@@ -385,6 +531,7 @@ else ifeq ($(platform), qnx)
 	CXX = QCC -Vgcc_ntoarmv7le
 	AR = QCC -Vgcc_ntoarmv7le
 	WITH_DYNAREC=arm
+	HAVE_GENERIC_JIT = 0
 	FORCE_GLES = 1
 	PLATCFLAGS += -DNO_ASM -D__BLACKBERRY_QNX__
 	CPUFLAGS += -marm -mcpu=cortex-a9 -mfpu=neon -mfloat-abi=softfp -D__arm__ -DARM_ASM -D__NEON_OPT
@@ -400,6 +547,7 @@ else ifneq (,$(findstring armv,$(platform)))
 	fpic := -fPIC
 	CPUFLAGS += -DNO_ASM -DARM -D__arm__ -DARM_ASM -DNOSSE
 	WITH_DYNAREC=arm
+	HAVE_GENERIC_JIT = 0
 	PLATCFLAGS += -DARM
 	ifneq (,$(findstring gles,$(platform)))
 		FORCE_GLES = 1
@@ -447,7 +595,7 @@ else
 		endif
 	endif
 	EXT       ?= dll
-	HAVE_GENERIC_JIT   = 0
+	HAVE_GENERIC_JIT = 0
 	TARGET := $(TARGET_NAME)_libretro.$(EXT)
 	LDFLAGS += -shared -static-libgcc -static-libstdc++ -Wl,--version-script=link.T -lwinmm -lgdi32
 	GL_LIB := -lopengl32
@@ -490,6 +638,7 @@ endif
 
 ifeq ($(WITH_DYNAREC), $(filter $(WITH_DYNAREC), x86_64 x64))
 	HOST_CPU_FLAGS = -DHOST_CPU=$(HOST_CPU_X64)
+	HAVE_LTCG = 0
 endif
 
 ifeq ($(WITH_DYNAREC), x86)
@@ -711,6 +860,7 @@ CXXFLAGS   += $(fpic)
 LDFLAGS    += $(fpic)
 
 OBJECTS := $(SOURCES_CXX:.cpp=.o) $(SOURCES_C:.c=.o) $(SOURCES_ASM:.S=.o)
+OBJECTS:=$(OBJECTS:.cc=.o)
 
 ifneq (,$(findstring msvc,$(platform)))
 	OBJOUT = -Fo
@@ -739,5 +889,9 @@ endif
 %.o: %.S
 	$(CC_AS) $(ASFLAGS) $(INCFLAGS) $< -o $@
 
+%.o: %.cc
+	$(CXX) $(INCFLAGS) $(CFLAGS) $(MFLAGS) $(CXXFLAGS) $< -o $@
+
 clean:
 	rm -f $(OBJECTS) $(TARGET)
+

@@ -74,6 +74,7 @@ bool renderer_changed = false;	// Signals the renderer interface to switch rende
 cResetEvent rs(false,true);
 cResetEvent re(false,true);
 #endif
+extern cResetEvent frame_finished;
 
 int max_idx,max_mvo,max_op,max_pt,max_tr,max_vtx,max_modt, ovrn;
 bool pend_rend = false;
@@ -141,10 +142,11 @@ void rend_term_renderer()
 
 bool rend_frame(TA_context* ctx, bool draw_osd)
 {
-   if (renderer_changed)
+   if (renderer_changed || renderer == NULL)
    {
 	  renderer_changed = false;
-	  rend_term_renderer();
+	  if (renderer != NULL)
+		 rend_term_renderer();
 	  rend_create_renderer();
 	  rend_init_renderer();
    }
@@ -294,7 +296,8 @@ void rend_end_render(void)
 		   re.Wait();
 	   else
 #endif
-           renderer->Present();
+		  if(renderer != NULL)
+			 renderer->Present();
    }
 }
 
@@ -307,6 +310,7 @@ void rend_cancel_emu_wait()
 		re.Set();
 	}
 #endif
+	frame_finished.Set();
 }
 
 bool rend_init(void)

@@ -85,17 +85,15 @@ void main() \n\
 	vtx_base=in_base; \n\
 	vtx_offs=in_offs; \n\
 	vtx_uv=in_uv; \n\
-	vec4 vpos=in_pos; \n\
+	highp vec4 vpos = in_pos; \n\
+	if (vpos.z < 0.0 || vpos.z > 3.4e37) \n\
+	{ \n\
+	   gl_Position = vec4(0.0, 0.0, 1.0, 1.0 / vpos.z); \n\
+	   return; \n\
+	} \n\
+	\n\
 	vpos.w = extra_depth_scale / vpos.z; \n\
-#if TARGET_GL == GL3 \n\
-	if (abs(vpos.w) < 1.18e-10) \n\
-		vpos.w = 1.18e-10; \n\
-#endif \n\
 #if TARGET_GL != GLES2 \n\
-   if (vpos.w < 0.0) { \n\
-      gl_Position = vec4(0.0, 0.0, 0.0, vpos.w); \n\
-         return; \n\
-   } \n\
    vpos.z = vpos.w; \n\
 #else \n\
    vpos.z=depth_scale.x+depth_scale.y*vpos.w;  \n\
@@ -354,6 +352,9 @@ int GetProgramID(
 
 void findGLVersion()
 {
+   gl.stencil_present = true;
+   gl.index_type = GL_UNSIGNED_INT;
+
    while (true)
       if (glGetError() == GL_NO_ERROR)
          break;
@@ -373,8 +374,14 @@ void findGLVersion()
       {
          gl.gl_version = "GLES2";
          gl.glsl_version_header = "";
+         gl.index_type = GL_UNSIGNED_SHORT;
       }
       gl.fog_image_format = GL_ALPHA;
+
+      GLint stencilBits = 0;
+      glGetIntegerv(GL_STENCIL_BITS, &stencilBits);
+      if (stencilBits == 0)
+    	 gl.stencil_present = false;
    }
    else
    {
@@ -586,6 +593,8 @@ static void gl_term(void)
 	glDeleteBuffers(1, &gl.vbo.modvols);
 	glDeleteBuffers(1, &gl.vbo.idxs);
 	glDeleteBuffers(1, &gl.vbo.idxs2);
+	glDeleteTextures(1, &fbTextureId);
+	fbTextureId = 0;
 
 	memset(gl.program_table,0,sizeof(gl.program_table));
 }
@@ -738,6 +747,23 @@ void vertex_buffer_unmap(void)
 #endif
 
 void DoCleanup() {
+}
+
+static void upload_vertex_indices()
+{
+	if (gl.index_type == GL_UNSIGNED_SHORT)
+	{
+		static bool overrun;
+		static List<u16> short_idx;
+		if (short_idx.daty != NULL)
+			short_idx.Free();
+		short_idx.Init(pvrrc.idx.used(), &overrun, NULL);
+		for (u32 *p = pvrrc.idx.head(); p < pvrrc.idx.LastPtr(0); p++)
+			*(short_idx.Append()) = *p;
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, short_idx.bytes(), short_idx.head(), GL_STREAM_DRAW);
+	}
+	else
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER,pvrrc.idx.bytes(),pvrrc.idx.head(),GL_STREAM_DRAW);
 }
 
 static bool RenderFrame(void)
@@ -953,6 +979,7 @@ static bool RenderFrame(void)
 
    glcache.Disable(GL_SCISSOR_TEST);
    glClearDepth(0.f);
+   glcache.DepthMask(GL_TRUE);
    glStencilMask(0xFF);
    glClear(GL_STENCIL_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -966,7 +993,7 @@ static bool RenderFrame(void)
 
       glBufferData(GL_ARRAY_BUFFER,pvrrc.verts.bytes(),pvrrc.verts.head(),GL_STREAM_DRAW); glCheck();
 
-      glBufferData(GL_ELEMENT_ARRAY_BUFFER,pvrrc.idx.bytes(),pvrrc.idx.head(),GL_STREAM_DRAW); glCheck();
+      upload_vertex_indices();
 
       //Modvol VBO
       if (pvrrc.modtrig.used())
@@ -1032,7 +1059,9 @@ static bool RenderFrame(void)
    else
    {
       glcache.ClearColor(0.f, 0.f, 0.f, 0.f);
-		glClear(GL_COLOR_BUFFER_BIT);
+      glClear(GL_COLOR_BUFFER_BIT);
+      glBindBuffer(GL_ARRAY_BUFFER, gl.vbo.geometry); glCheck();
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gl.vbo.idxs); glCheck();
       DrawFramebuffer(dc_width, dc_height);
    }
 
@@ -1079,21 +1108,19 @@ bool ProcessFrame(TA_context* ctx)
 	}
    CollectCleanup();
 
-   return true;
+   return !ctx->rend.Overrun;
 }
 
 struct glesrend : Renderer
 {
-	bool Init()
+   bool Init()
    {
-      glsm_ctl(GLSM_CTL_STATE_SETUP, NULL);
-
       if (!gl_create_resources())
          return false;
 
       glcache.EnableCache();
 
-#ifdef GLES
+#ifdef HAVE_OPENGLES
       glHint(GL_GENERATE_MIPMAP_HINT, GL_FASTEST);
 #endif
 
@@ -1113,16 +1140,9 @@ struct glesrend : Renderer
 	void Resize(int w, int h) { screen_width=w; screen_height=h; }
 	void Term()
    {
-      if (KillTex)
-      {
-         void killtex();
-         killtex();
-         printf("Texture cache cleared\n");
-      }
+	   killtex();
 
-      CollectCleanup();
-
-      gl_term();
+	   gl_term();
    }
 
 	bool Process(TA_context* ctx)

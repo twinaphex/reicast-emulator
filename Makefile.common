@@ -6,18 +6,21 @@ INCFLAGS    += -I$(CORE_DIR)/core/libretro \
 					-I$(DEPS_DIR) \
 					-I$(DEPS_DIR)/picotcp/include \
 					-I$(DEPS_DIR)/picotcp/modules \
-					-I$(LIBRETRO_COMM_DIR)/include
+					-I$(LIBRETRO_COMM_DIR)/include \
+					-I$(DEPS_DIR)/vixl
 
 CORE_DEFINES += -DNO_MMU
 
 SOURCES_C   :=
 SOURCES_CXX := \
 					$(CORE_DIR)/core/hw/arm7/arm_mem.cpp \
+					$(CORE_DIR)/core/hw/arm7/arm64.cpp \
 					$(CORE_DIR)/core/hw/arm7/arm7.cpp \
 					$(CORE_DIR)/core/hw/arm7/vbaARM.cpp \
 					$(CORE_DIR)/core/hw/arm7/virt_arm.cpp \
 					\
 					$(CORE_DIR)/core/hw/aica/dsp.cpp \
+					$(CORE_DIR)/core/hw/aica/dsp_arm64.cpp \
 					$(CORE_DIR)/core/hw/aica/dsp_interp.cpp \
 					$(CORE_DIR)/core/hw/aica/aica.cpp \
 					$(CORE_DIR)/core/hw/aica/aica_if.cpp \
@@ -77,6 +80,7 @@ SOURCES_CXX := \
 					$(CORE_DIR)/core/imgread/cdi.cpp \
 					$(CORE_DIR)/core/imgread/chd.cpp \
 					$(CORE_DIR)/core/imgread/common.cpp \
+					$(CORE_DIR)/core/imgread/cue.cpp \
 					$(CORE_DIR)/core/imgread/gdi.cpp \
 					\
 					$(CORE_DIR)/core/nullDC.cpp \
@@ -96,7 +100,11 @@ SOURCES_CXX := \
 					$(CORE_DIR)/core/reios/reios_elf.cpp \
 					$(CORE_DIR)/core/reios/reios.cpp \
 					$(CORE_DIR)/core/reios/gdrom_hle.cpp \
-					$(CORE_DIR)/core/reios/descrambl.cpp
+					$(CORE_DIR)/core/reios/descrambl.cpp \
+					\
+					$(CORE_DIR)/core/archive/archive.cpp \
+					$(CORE_DIR)/core/archive/7zArchive.cpp \
+					$(CORE_DIR)/core/archive/ZipArchive.cpp
 
 SOURCES_C +=   \
 					$(DEPS_DIR)/chdr/bitstream.c \
@@ -104,6 +112,77 @@ SOURCES_C +=   \
 					$(DEPS_DIR)/chdr/chd.c \
 					$(DEPS_DIR)/chdr/flac.c \
 					$(DEPS_DIR)/chdr/huffman.c \
+					\
+					$(DEPS_DIR)/libpng/png.c \
+					$(DEPS_DIR)/libpng/pngerror.c \
+					$(DEPS_DIR)/libpng/pngget.c \
+					$(DEPS_DIR)/libpng/pngmem.c \
+					$(DEPS_DIR)/libpng/pngpread.c \
+					$(DEPS_DIR)/libpng/pngread.c \
+					$(DEPS_DIR)/libpng/pngrio.c \
+					$(DEPS_DIR)/libpng/pngrtran.c \
+					$(DEPS_DIR)/libpng/pngrutil.c \
+					$(DEPS_DIR)/libpng/pngset.c \
+					$(DEPS_DIR)/libpng/pngtrans.c \
+					$(DEPS_DIR)/libpng/pngwio.c \
+					$(DEPS_DIR)/libpng/pngwrite.c \
+					$(DEPS_DIR)/libpng/pngwtran.c \
+					$(DEPS_DIR)/libpng/pngwutil.c \
+					\
+					$(DEPS_DIR)/libzip/mkstemp.c \
+					$(DEPS_DIR)/libzip/zip_add.c \
+					$(DEPS_DIR)/libzip/zip_add_dir.c \
+					$(DEPS_DIR)/libzip/zip_close.c \
+					$(DEPS_DIR)/libzip/zip_delete.c \
+					$(DEPS_DIR)/libzip/zip_dirent.c \
+					$(DEPS_DIR)/libzip/zip_entry_free.c \
+					$(DEPS_DIR)/libzip/zip_entry_new.c \
+					$(DEPS_DIR)/libzip/zip_error.c \
+					$(DEPS_DIR)/libzip/zip_error_clear.c \
+					$(DEPS_DIR)/libzip/zip_error_get.c \
+					$(DEPS_DIR)/libzip/zip_error_get_sys_type.c \
+					$(DEPS_DIR)/libzip/zip_error_strerror.c \
+					$(DEPS_DIR)/libzip/zip_error_to_str.c \
+					$(DEPS_DIR)/libzip/zip_err_str.c \
+					$(DEPS_DIR)/libzip/zip_fclose.c \
+					$(DEPS_DIR)/libzip/zip_file_error_clear.c \
+					$(DEPS_DIR)/libzip/zip_file_error_get.c \
+					$(DEPS_DIR)/libzip/zip_file_get_offset.c \
+					$(DEPS_DIR)/libzip/zip_filerange_crc.c \
+					$(DEPS_DIR)/libzip/zip_file_strerror.c \
+					$(DEPS_DIR)/libzip/zip_fopen.c \
+					$(DEPS_DIR)/libzip/zip_fopen_index.c \
+					$(DEPS_DIR)/libzip/zip_fread.c \
+					$(DEPS_DIR)/libzip/zip_free.c \
+					$(DEPS_DIR)/libzip/zip_get_archive_comment.c \
+					$(DEPS_DIR)/libzip/zip_get_archive_flag.c \
+					$(DEPS_DIR)/libzip/zip_get_file_comment.c \
+					$(DEPS_DIR)/libzip/zip_get_name.c \
+					$(DEPS_DIR)/libzip/zip_get_num_files.c \
+					$(DEPS_DIR)/libzip/zip_memdup.c \
+					$(DEPS_DIR)/libzip/zip_name_locate.c \
+					$(DEPS_DIR)/libzip/zip_new.c \
+					$(DEPS_DIR)/libzip/zip_open.c \
+					$(DEPS_DIR)/libzip/zip_rename.c \
+					$(DEPS_DIR)/libzip/zip_replace.c \
+					$(DEPS_DIR)/libzip/zip_set_archive_comment.c \
+					$(DEPS_DIR)/libzip/zip_set_archive_flag.c \
+					$(DEPS_DIR)/libzip/zip_set_file_comment.c \
+					$(DEPS_DIR)/libzip/zip_set_name.c \
+					$(DEPS_DIR)/libzip/zip_source_buffer.c \
+					$(DEPS_DIR)/libzip/zip_source_file.c \
+					$(DEPS_DIR)/libzip/zip_source_filep.c \
+					$(DEPS_DIR)/libzip/zip_source_free.c \
+					$(DEPS_DIR)/libzip/zip_source_function.c \
+					$(DEPS_DIR)/libzip/zip_source_zip.c \
+					$(DEPS_DIR)/libzip/zip_stat.c \
+					$(DEPS_DIR)/libzip/zip_stat_index.c \
+					$(DEPS_DIR)/libzip/zip_stat_init.c \
+					$(DEPS_DIR)/libzip/zip_strerror.c \
+					$(DEPS_DIR)/libzip/zip_unchange_all.c \
+					$(DEPS_DIR)/libzip/zip_unchange_archive.c \
+					$(DEPS_DIR)/libzip/zip_unchange.c \
+					$(DEPS_DIR)/libzip/zip_unchange_data.c \
 					\
 					$(DEPS_DIR)/picotcp/modules/pico_arp.c \
 					$(DEPS_DIR)/picotcp/modules/pico_dev_ppp.c \
@@ -136,7 +215,8 @@ ifeq ($(HAVE_GL), 1)
 
 SOURCES_CXX += $(CORE_DIR)/core/rend/gles/gles.cpp \
 					$(CORE_DIR)/core/rend/gles/gldraw.cpp \
-					$(CORE_DIR)/core/rend/gles/gltex.cpp
+					$(CORE_DIR)/core/rend/gles/gltex.cpp \
+					$(CORE_DIR)/core/rend/gles/CustomTexture.cpp
 ifeq ($(HAVE_OIT), 1)
 SOURCES_CXX += $(CORE_DIR)/core/rend/gl4/gles.cpp \
 					$(CORE_DIR)/core/rend/gl4/gldraw.cpp \
@@ -153,8 +233,12 @@ endif
 endif
 
 SOURCES_CXX += $(CORE_DIR)/core/hw/naomi/naomi.cpp \
-					$(CORE_DIR)/core/hw/naomi/naomi_cart.cpp 
-
+					$(CORE_DIR)/core/hw/naomi/naomi_cart.cpp \
+					$(CORE_DIR)/core/hw/naomi/decrypt.cpp \
+					$(CORE_DIR)/core/hw/naomi/m1cartridge.cpp \
+					$(CORE_DIR)/core/hw/naomi/m4cartridge.cpp \
+					$(CORE_DIR)/core/hw/naomi/awcartridge.cpp \
+					$(CORE_DIR)/core/hw/naomi/gdcartridge.cpp
 
 ifeq ($(HAVE_GENERIC_JIT), 1)
 DYNAREC_USED = 1
@@ -189,6 +273,32 @@ DYNAREC_USED = 1
 SOURCES_CXX += $(CORE_DIR)/core/rec-ARM/rec_arm.cpp
 endif
 
+ifeq ($(WITH_DYNAREC), arm)
+SOURCES_ASM += $(CORE_DIR)/core/rec-ARM/ngen_arm.S
+endif
+
+# Recompiler (ARM64)
+ifeq ($(WITH_DYNAREC), arm64)
+DYNAREC_USED = 1
+SOURCES_CXX += $(CORE_DIR)/core/rec-ARM64/rec_arm64.cpp \
+				$(DEPS_DIR)/vixl/code-buffer-vixl.cc \
+				$(DEPS_DIR)/vixl/compiler-intrinsics-vixl.cc \
+				$(DEPS_DIR)/vixl/cpu-features.cc \
+				$(DEPS_DIR)/vixl/utils-vixl.cc \
+				$(DEPS_DIR)/vixl/aarch64/assembler-aarch64.cc \
+				$(DEPS_DIR)/vixl/aarch64/cpu-aarch64.cc \
+				$(DEPS_DIR)/vixl/aarch64/cpu-features-auditor-aarch64.cc \
+				$(DEPS_DIR)/vixl/aarch64/decoder-aarch64.cc \
+				$(DEPS_DIR)/vixl/aarch64/disasm-aarch64.cc \
+				$(DEPS_DIR)/vixl/aarch64/instructions-aarch64.cc \
+				$(DEPS_DIR)/vixl/aarch64/instrument-aarch64.cc \
+				$(DEPS_DIR)/vixl/aarch64/logic-aarch64.cc \
+				$(DEPS_DIR)/vixl/aarch64/macro-assembler-aarch64.cc \
+				$(DEPS_DIR)/vixl/aarch64/operands-aarch64.cc \
+				$(DEPS_DIR)/vixl/aarch64/pointer-auth-aarch64.cc \
+				$(DEPS_DIR)/vixl/aarch64/simulator-aarch64.cc
+endif
+
 ifeq ($(DYNAREC_USED),1)
 SOURCES_CXX += $(CORE_DIR)/core/rec.cpp
 # Dynarec
@@ -197,10 +307,6 @@ SOURCES_CXX += $(CORE_DIR)/core/hw/sh4/dyna/decoder.cpp \
 					$(CORE_DIR)/core/hw/sh4/dyna/blockmanager.cpp \
 					$(CORE_DIR)/core/hw/sh4/dyna/shil.cpp 
 
-endif
-
-ifeq ($(WITH_DYNAREC), arm)
-SOURCES_ASM += $(CORE_DIR)/core/rec-ARM/ngen_arm.S
 endif
 
 SOURCES_CXX += $(CORE_DIR)/core/libretro/libretro.cpp \
@@ -235,9 +341,29 @@ SOURCES_C += \
 				 $(DEPS_DIR)/flac/memory.c \
 				 $(DEPS_DIR)/flac/stream_decoder.c
 
-SOURCES_C += $(DEPS_DIR)/lzma/C/LzFind.c \
+SOURCES_C += $(DEPS_DIR)/lzma/C/7zArcIn.c \
+				 $(DEPS_DIR)/lzma/C/7zBuf.c \
+				 $(DEPS_DIR)/lzma/C/7zCrc.c \
+				 $(DEPS_DIR)/lzma/C/7zCrcOpt.c \
+				 $(DEPS_DIR)/lzma/C/7zDec.c \
+				 $(DEPS_DIR)/lzma/C/7zFile.c \
+				 $(DEPS_DIR)/lzma/C/7zStream.c \
+				 $(DEPS_DIR)/lzma/C/Alloc.c \
+				 $(DEPS_DIR)/lzma/C/Bcj2.c \
+				 $(DEPS_DIR)/lzma/C/Bra86.c \
+				 $(DEPS_DIR)/lzma/C/Bra.c \
+				 $(DEPS_DIR)/lzma/C/BraIA64.c \
+				 $(DEPS_DIR)/lzma/C/CpuArch.c \
+				 $(DEPS_DIR)/lzma/C/Delta.c \
+				 $(DEPS_DIR)/lzma/C/LzFind.c \
+				 $(DEPS_DIR)/lzma/C/Lzma2Dec.c \
+				 $(DEPS_DIR)/lzma/C/Lzma86Dec.c \
+				 $(DEPS_DIR)/lzma/C/Lzma86Enc.c \
 				 $(DEPS_DIR)/lzma/C/LzmaDec.c \
-				 $(DEPS_DIR)/lzma/C/LzmaEnc.c
+				 $(DEPS_DIR)/lzma/C/LzmaEnc.c \
+				 $(DEPS_DIR)/lzma/C/LzmaLib.c \
+				 $(DEPS_DIR)/lzma/C/Sort.c
+
 endif
 
 SOURCES_C +=   $(DEPS_DIR)/zlib/deflate.c \
