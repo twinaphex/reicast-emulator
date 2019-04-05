@@ -55,6 +55,8 @@ char nvmem_file[PATH_MAX];
 char nvmem_file2[PATH_MAX];		// AtomisWave
 bool boot_to_bios;
 
+static bool devices_need_refresh = false;
+static int device_type[4] = {0,0,0,0};
 static int astick_deadzone = 0;
 static int trigger_deadzone = 0;
 static bool digital_triggers = false;
@@ -131,6 +133,7 @@ bool rend_single_frame();
 void rend_cancel_emu_wait();
 bool acquire_mainloop_lock();
 
+static void refresh_devices();
 static void init_disk_control_interface(const char *initial_image_path);
 
 static bool read_m3u(const char *file);
@@ -1167,6 +1170,8 @@ void retro_run (void)
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
       update_variables(false);
 
+   refresh_devices();
+
 #if !defined(TARGET_NO_THREADS)
    if (settings.rend.ThreadedRendering)
    {
@@ -1808,6 +1813,7 @@ bool retro_load_game(const struct retro_game_info *game)
 	  return false;
    }
    init_disk_control_interface(game->path);
+   refresh_devices();
 
    return true;
 }
@@ -1820,28 +1826,29 @@ bool retro_load_game_special(unsigned game_type, const struct retro_game_info *i
 void retro_unload_game(void)
 {
 	printf("reicast unloading game\n") ;
-   if (game_data)
-      free(game_data);
-   game_data = NULL;
+	devices_need_refresh = true;
+	if (game_data)
+		free(game_data);
+	game_data = NULL;
 
-   dc_stop();
+	dc_stop();
 #if !defined(TARGET_NO_THREADS)
-   if (settings.rend.ThreadedRendering)
-   {
-	   rend_cancel_emu_wait();
-	   printf("Waiting for emu thread......\n");
-	   if ( emu_in_thread )
-	   {
-		   frontend_clear_thread_waits_cb(1,NULL) ;
-		   printf("Waiting for emu thread to end...\n");
-		   emu_thread.WaitToEnd();
-		   frontend_clear_thread_waits_cb(0,NULL) ;
-	   }
-	   printf("...Done\n");
-   }
-   else
+	if (settings.rend.ThreadedRendering)
+	{
+		rend_cancel_emu_wait();
+		printf("Waiting for emu thread......\n");
+		if ( emu_in_thread )
+		{
+			frontend_clear_thread_waits_cb(1,NULL) ;
+			printf("Waiting for emu thread to end...\n");
+			emu_thread.WaitToEnd();
+			frontend_clear_thread_waits_cb(0,NULL) ;
+		}
+		printf("...Done\n");
+	}
+	else
 #endif
-	   dc_term();
+		dc_term();
 }
 
 
@@ -2075,41 +2082,53 @@ unsigned retro_get_region (void)
 // Controller
 void retro_set_controller_port_device(unsigned in_port, unsigned device)
 {
-   if (in_port < MAPLE_PORTS)
-   {
-	  switch (device)
-	  {
-	  case RETRO_DEVICE_JOYPAD:
-		 maple_devices[in_port] = MDT_SegaController;
-		 break;
-	  case RETRO_DEVICE_KEYBOARD:
-		 maple_devices[in_port] = MDT_Keyboard;
-		 break;
-	  case RETRO_DEVICE_MOUSE:
-		 maple_devices[in_port] = MDT_Mouse;
-		 break;
-	  case RETRO_DEVICE_LIGHTGUN:
-		 maple_devices[in_port] = MDT_LightGun;
-		 break;
-	  default:
-		 maple_devices[in_port] = MDT_None;
-		 break;
-	  }
-	  set_input_descriptors();
-
-	  if (!emu_in_thread)
-	  {
-		 mcfg_DestroyDevices();
-		 mcfg_CreateDevices();
-	  }
-   }
-   if (rumble.set_rumble_state)
-   {
-	  rumble.set_rumble_state(in_port, RETRO_RUMBLE_STRONG, 0);
-	  rumble.set_rumble_state(in_port, RETRO_RUMBLE_WEAK,   0);
-   }
+	if (device_type[in_port] != device && in_port < MAPLE_PORTS)
+	{
+		devices_need_refresh = true;
+		device_type[in_port] = device;
+		switch (device)
+		{
+			case RETRO_DEVICE_JOYPAD:
+				maple_devices[in_port] = MDT_SegaController;
+				break;
+			case RETRO_DEVICE_KEYBOARD:
+				maple_devices[in_port] = MDT_Keyboard;
+				break;
+			case RETRO_DEVICE_MOUSE:
+				maple_devices[in_port] = MDT_Mouse;
+				break;
+			case RETRO_DEVICE_LIGHTGUN:
+				maple_devices[in_port] = MDT_LightGun;
+				break;
+			default:
+				maple_devices[in_port] = MDT_None;
+				break;
+		}
+	}
 }
 
+static void refresh_devices()
+{
+	if (devices_need_refresh)
+	{
+		devices_need_refresh = false;
+		set_input_descriptors();
+
+		if (!emu_in_thread)
+		{
+			mcfg_DestroyDevices();
+			mcfg_CreateDevices();
+		}
+		if (rumble.set_rumble_state)
+		{
+			for(i = 0; i < MAPLE_PORTS; i++)
+			{
+				rumble.set_rumble_state(i, RETRO_RUMBLE_STRONG, 0);
+				rumble.set_rumble_state(i, RETRO_RUMBLE_WEAK,   0);
+			}
+		}
+	}
+}
 
 // API version (to detect version mismatch)
 unsigned retro_api_version(void)
