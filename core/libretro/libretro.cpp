@@ -18,7 +18,7 @@
 #include "../hw/sh4/sh4_mem.h"
 #include "../hw/sh4/sh4_sched.h"
 #include "keyboard_map.h"
-#include "../hw/maple/maple_cfg.h"
+#include "hw/maple/maple_if.h"
 #include "../hw/pvr/spg.h"
 #include "../hw/naomi/naomi_cart.h"
 #include "../imgread/common.h"
@@ -55,6 +55,8 @@ char nvmem_file[PATH_MAX];
 char nvmem_file2[PATH_MAX];		// AtomisWave
 bool boot_to_bios;
 
+static bool devices_need_refresh = false;
+static int device_type[4] = {-1,-1,-1,-1};
 static int astick_deadzone = 0;
 static int trigger_deadzone = 0;
 static bool digital_triggers = false;
@@ -131,7 +133,10 @@ bool rend_single_frame();
 void rend_cancel_emu_wait();
 bool acquire_mainloop_lock();
 
+static void refresh_devices(bool descriptors_only);
 static void init_disk_control_interface(const char *initial_image_path);
+
+static bool read_m3u(const char *file);
 
 static int co_argc;
 static wchar** co_argv;
@@ -149,6 +154,13 @@ static cThread emu_thread(&emu_thread_func, 0);
 static cMutex mtx_serialization ;
 static cMutex mtx_mainloop ;
 static bool gl_ctx_resetting = false;
+bool reset_requested;
+
+// Disk swapping
+static struct retro_disk_control_callback retro_disk_control_cb;
+static unsigned disk_index = 0;
+static std::vector<std::string> disk_paths;
+static bool disc_tray_open = false;
 
 static void *emu_thread_func(void *)
 {
@@ -164,8 +176,13 @@ static void *emu_thread_func(void *)
     	mtx_serialization.Lock() ;
     	mtx_serialization.Unlock() ;
 
-    	if (!performed_serialization)
+    	if (!performed_serialization && !reset_requested)
     		break ;
+    	if (reset_requested)
+    	{
+    		dc_reset();
+    		reset_requested = false;
+    	}
     }
 
 	rend_cancel_emu_wait() ;
@@ -454,7 +471,7 @@ void retro_set_environment(retro_environment_t cb)
       },
       {
          "reicast_enable_purupuru",
-         "Purupuru Pack (restart); enabled|disabled"
+         "Purupuru Pack; enabled|disabled"
       },
       {
          "reicast_allow_service_buttons",
@@ -955,7 +972,13 @@ static void update_variables(bool first_startup)
 
    var.key = "reicast_enable_purupuru";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-      enable_purupuru = (strcmp("enabled", var.value) == 0);
+   {
+      if (enable_purupuru != (strcmp("enabled", var.value) == 0) && settings.System == DC_PLATFORM_DREAMCAST)
+      {
+      	enable_purupuru = (strcmp("enabled", var.value) == 0);
+      	maple_ReconnectDevices();
+      }
+   }
 
    var.key = "reicast_analog_stick_deadzone";
    var.value = NULL;
@@ -1152,6 +1175,8 @@ void retro_run (void)
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
       update_variables(false);
+
+   refresh_devices(false);
 
 #if !defined(TARGET_NO_THREADS)
    if (settings.rend.ThreadedRendering)
@@ -1646,10 +1671,11 @@ bool retro_load_game(const struct retro_game_info *game)
    settings.dreamcast.cable = 3;
    update_variables(true);
 
+   char *ext = strrchr(g_base_name, '.');
+
    {
       /* Check for extension .lst, .bin, .dat or .zip. If found, we will set the system type
        * automatically to Naomi or AtomisWave. */
-      char *ext = strrchr(g_base_name, '.');
       if (ext)
       {
          log_cb(RETRO_LOG_INFO, "File extension is: %s\n", ext);
@@ -1658,7 +1684,19 @@ bool retro_load_game(const struct retro_game_info *game)
         	   || !strcmp(".dat", ext) || !strcmp(".DAT", ext)
         	   || !strcmp(".zip", ext) || !strcmp(".ZIP", ext)
         	   || !strcmp(".7z", ext) || !strcmp(".7Z", ext))
-        	settings.System = naomi_cart_GetSystemType(game->path);
+         {
+            settings.System = naomi_cart_GetSystemType(game->path);
+         }
+         // If m3u playlist found load the paths into array
+         else if (!strcmp(".m3u", ext) || !strcmp(".M3U", ext))
+         {
+            if (!read_m3u(game->path))
+            {
+               if (log_cb)
+                  log_cb(RETRO_LOG_ERROR, "%s\n", "[libretro]: failed to read m3u file ...\n");
+               return false;
+            }
+         }
       }
    }
 
@@ -1671,7 +1709,19 @@ bool retro_load_game(const struct retro_game_info *game)
    }
 
    if (!boot_to_bios)
-      game_data = strdup(game->path);
+   {
+      // if an m3u file was loaded, disk_paths will already be populated so load the game from there
+      if (disk_paths.size() > 0)
+      {
+         disk_index = 0;
+         game_data = strdup(disk_paths[disk_index].c_str());
+      }
+      else
+      {
+         disk_paths.push_back(game->path);
+         game_data = strdup(game->path);
+      } 
+   }
 
    {
       char data_dir[1024];
@@ -1685,8 +1735,6 @@ bool retro_load_game(const struct retro_game_info *game)
          mkdir_norecurse(data_dir);
       }
    }
-   int rotation = rotate_screen ? 1 : 0;
-   environ_cb(RETRO_ENVIRONMENT_SET_ROTATION, &rotation);
 
    params.context_type          = RETRO_HW_CONTEXT_NONE;
 
@@ -1768,7 +1816,12 @@ bool retro_load_game(const struct retro_game_info *game)
 		 log_cb(RETRO_LOG_ERROR, "Reicast emulator initialization failed\n");
 	  return false;
    }
+   int rotation = rotate_screen ? 3 : 0;
+   if (naomi_cart_GetRotation() == 3)
+      rotation = rotate_screen ? 0 : 1;
+   environ_cb(RETRO_ENVIRONMENT_SET_ROTATION, &rotation);
    init_disk_control_interface(game->path);
+   refresh_devices(true);
 
    return true;
 }
@@ -1977,7 +2030,7 @@ void retro_get_system_info(struct retro_system_info *info)
 #define GIT_VERSION ""
 #endif
    info->library_version = "0.1" GIT_VERSION;
-   info->valid_extensions = "chd|cdi|iso|elf|cue|gdi|lst|bin|dat|zip|7z";
+   info->valid_extensions = "chd|cdi|iso|elf|cue|gdi|lst|bin|dat|zip|7z|m3u";
    info->need_fullpath = true;
    info->block_extract = true;
 }
@@ -1989,21 +2042,15 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
    u32 pixel_clock= spg_clks[(SPG_CONTROL.full >> 6) & 3];
 
    info->geometry.aspect_ratio = settings.rend.WideScreen ? (16.0 / 9.0) : (4.0 / 3.0);
+   if(naomi_cart_GetRotation() == 3)
+      info->geometry.aspect_ratio = 1 / info->geometry.aspect_ratio;
+   int maximum = screen_width > screen_height ? screen_width : screen_height;
+   info->geometry.base_width   = screen_height;
+   info->geometry.base_height  = screen_width;
+   info->geometry.max_width    = maximum;
+   info->geometry.max_height   = maximum;
    if (rotate_screen)
-   {
-	  info->geometry.base_width   = screen_height;
-	  info->geometry.base_height  = screen_width;
-	  info->geometry.max_width    = screen_height;
-	  info->geometry.max_height   = screen_width;
-	  info->geometry.aspect_ratio = 1 / info->geometry.aspect_ratio;
-   }
-   else
-   {
-	  info->geometry.base_width   = screen_width;
-	  info->geometry.base_height  = screen_height;
-	  info->geometry.max_width    = screen_width;
-	  info->geometry.max_height   = screen_height;
-   }
+      info->geometry.aspect_ratio = 1 / info->geometry.aspect_ratio;
 
    switch (pixel_clock)
    {
@@ -2032,45 +2079,59 @@ unsigned retro_get_region (void)
    return RETRO_REGION_NTSC; //TODO
 }
 
-
 // Controller
 void retro_set_controller_port_device(unsigned in_port, unsigned device)
 {
-   if (in_port < MAPLE_PORTS)
-   {
-	  switch (device)
-	  {
-	  case RETRO_DEVICE_JOYPAD:
-		 maple_devices[in_port] = MDT_SegaController;
-		 break;
-	  case RETRO_DEVICE_KEYBOARD:
-		 maple_devices[in_port] = MDT_Keyboard;
-		 break;
-	  case RETRO_DEVICE_MOUSE:
-		 maple_devices[in_port] = MDT_Mouse;
-		 break;
-	  case RETRO_DEVICE_LIGHTGUN:
-		 maple_devices[in_port] = MDT_LightGun;
-		 break;
-	  default:
-		 maple_devices[in_port] = MDT_None;
-		 break;
-	  }
-	  set_input_descriptors();
-
-	  if (!emu_in_thread)
-	  {
-		 mcfg_DestroyDevices();
-		 mcfg_CreateDevices();
-	  }
-   }
-   if (rumble.set_rumble_state)
-   {
-	  rumble.set_rumble_state(in_port, RETRO_RUMBLE_STRONG, 0);
-	  rumble.set_rumble_state(in_port, RETRO_RUMBLE_WEAK,   0);
-   }
+	if (device_type[in_port] != device && in_port < MAPLE_PORTS)
+	{
+		devices_need_refresh = true;
+		device_type[in_port] = device;
+		switch (device)
+		{
+			case RETRO_DEVICE_JOYPAD:
+				maple_devices[in_port] = MDT_SegaController;
+				break;
+			case RETRO_DEVICE_KEYBOARD:
+				maple_devices[in_port] = MDT_Keyboard;
+				break;
+			case RETRO_DEVICE_MOUSE:
+				maple_devices[in_port] = MDT_Mouse;
+				break;
+			case RETRO_DEVICE_LIGHTGUN:
+				maple_devices[in_port] = MDT_LightGun;
+				break;
+			default:
+				maple_devices[in_port] = MDT_None;
+				break;
+		}
+	}
 }
 
+static void refresh_devices(bool descriptors_only)
+{
+	if (devices_need_refresh)
+	{
+		devices_need_refresh = false;
+		set_input_descriptors();
+
+		if (!descriptors_only)
+		{
+			if (settings.System == DC_PLATFORM_DREAMCAST)
+			{
+				maple_ReconnectDevices();
+			}
+
+			if (rumble.set_rumble_state)
+			{
+				for(int i = 0; i < MAPLE_PORTS; i++)
+				{
+					rumble.set_rumble_state(i, RETRO_RUMBLE_STRONG, 0);
+					rumble.set_rumble_state(i, RETRO_RUMBLE_WEAK,   0);
+				}
+			}
+		}
+	}
+}
 
 // API version (to detect version mismatch)
 unsigned retro_api_version(void)
@@ -2700,17 +2761,18 @@ void os_DebugBreak(void)
    __builtin_trap();
 }
 
-// Disk swapping
-static struct retro_disk_control_callback retro_disk_control_cb;
-static unsigned disk_index = 0;
-static std::vector<std::string> disk_paths;
-static bool disc_tray_open = false;
-
 static bool retro_set_eject_state(bool ejected)
 {
    disc_tray_open = ejected;
-
-   return true;
+   if (ejected)
+   {
+      DiscOpenLid();
+      return true;
+   }
+   else
+   {
+      return DiscSwap();
+   }
 }
 
 static bool retro_get_eject_state()
@@ -2736,7 +2798,10 @@ static bool retro_set_image_index(unsigned index)
    strncpy(settings.imgread.DefaultImage, disk_paths[index].c_str(), sizeof(settings.imgread.DefaultImage));
    settings.imgread.DefaultImage[sizeof(settings.imgread.DefaultImage) - 1] = '\0';
 
-   return DiscSwap();
+   if (disc_tray_open)
+      return true;
+   else
+      return DiscSwap();
 }
 
 static unsigned retro_get_num_images()
@@ -2779,5 +2844,48 @@ static void init_disk_control_interface(const char *initial_image_path)
   retro_disk_control_cb.replace_image_index = retro_replace_image_index;
 
   environ_cb(RETRO_ENVIRONMENT_SET_DISK_CONTROL_INTERFACE, &retro_disk_control_cb);
-  disk_paths.push_back(initial_image_path);
+}
+
+static bool read_m3u(const char *file)
+{
+   char line[PATH_MAX];
+   char name[PATH_MAX];
+   FILE *f = fopen(file, "r");
+
+   if (!f)
+   {
+      log_cb(RETRO_LOG_ERROR, "Could not read file\n");
+      return false;
+   }
+
+   while (fgets(line, sizeof(line), f) && disk_index <= disk_paths.size())
+   {
+      if (line[0] == '#')
+         continue;
+
+      char *carriage_return = strchr(line, '\r');
+      if (carriage_return)
+         *carriage_return = '\0';
+
+      char *newline = strchr(line, '\n');
+      if (newline)
+         *newline = '\0';
+
+      // Remove any beginning and ending quotes as these can cause issues when feeding the paths into command line later
+      if (line[0] == '"')
+         memmove(line, line + 1, strlen(line));
+
+      if (line[strlen(line) - 1] == '"')
+         line[strlen(line) - 1]  = '\0';
+
+      if (line[0] != '\0')
+      {
+         snprintf(name, sizeof(name), "%s%s", g_roms_dir, line);
+         disk_paths.push_back(name);
+         disk_index++;
+      }
+   }
+
+   fclose(f);
+   return (disk_index != 0);
 }

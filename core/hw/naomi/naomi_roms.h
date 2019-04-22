@@ -24,6 +24,7 @@
  */
 #pragma once
 #include "naomi_roms_input.h"
+#include "naomi_roms_eeprom.h"
 
 #define MAX_GAME_FILES 40
 
@@ -204,6 +205,7 @@ struct Game
     } blobs[MAX_GAME_FILES];
     const char *gdrom_name;
     InputDescriptors *inputs;
+    u8 *eeprom_dump;
 }
 Games[] =
 {
@@ -807,7 +809,8 @@ Games[] =
             { NULL, 0, 0 },
         },
         NULL,
-        &alpilot_inputs
+        &alpilot_inputs,
+        alpilot_eeprom_dump
     },
     // Airline Pilots (Japan, Rev A)
     {
@@ -835,7 +838,8 @@ Games[] =
             { NULL, 0, 0 },
         },
         NULL,
-        &alpilot_inputs
+        &alpilot_inputs,
+        alpilot_eeprom_dump
     },
     // Alien Front (Rev T)
     {
@@ -1336,7 +1340,7 @@ Games[] =
         0x0008ad01,
         NULL,
         M2,
-        REGION_AUSTRALIA,
+        REGION_EXPORT,
         ROT0,
         {
             { "epr-22207.ic22",  0x0000000, 0x0400000 }, 
@@ -1361,11 +1365,6 @@ Games[] =
             { "mpr-22118.ic19s", 0x9800000, 0x0800000 },
             { "mpr-22119.ic20s", 0xa000000, 0x0800000 },
             { "mpr-22120.ic21s", 0xa800000, 0x0800000 },
-            
-            // on-cart X76F100 eeprom contents
-            //ROM_REGION( 0x84, "naomibd_eeprom", 0 )
-            //ROM_LOAD( "841-0003.sf",  0x000000, 0x000084, CRC(3a119a17) SHA1(d37a092cca7c9cfc5f2637b355af90a65d04013e) )
-            
             { NULL, 0, 0 },
         }
     },
@@ -1377,7 +1376,7 @@ Games[] =
         0x0008ad01,
         NULL,
         M2,
-        REGION_AUSTRALIA,
+        REGION_EXPORT,
         ROT0,
         {
             { "epr-22121a.ic22", 0x0000000, 0x0400000 },
@@ -1402,11 +1401,6 @@ Games[] =
             { "mpr-22118.ic19s", 0x9800000, 0x0800000 },
             { "mpr-22119.ic20s", 0xa000000, 0x0800000 },
             { "mpr-22120.ic21s", 0xa800000, 0x0800000 },
-            
-            // on-cart X76F100 eeprom contents
-            //ROM_REGION( 0x84, "naomibd_eeprom", 0 )
-            //ROM_LOAD( "841-0003.sf",  0x000000, 0x000084, CRC(3a119a17) SHA1(d37a092cca7c9cfc5f2637b355af90a65d04013e) )
-            
             { NULL, 0, 0 },
         }
     },
@@ -1418,7 +1412,7 @@ Games[] =
         0x0008ad01,
         NULL,
         M2,
-        REGION_AUSTRALIA,
+        REGION_EXPORT,
         ROT0,
         {
             { "doa2verm.ic22",   0x0000000, 0x0400000 },
@@ -1443,11 +1437,6 @@ Games[] =
             { "mpr-22118.ic19s", 0x9800000, 0x0800000 },
             { "mpr-22119.ic20s", 0xa000000, 0x0800000 },
             { "mpr-22120.ic21s", 0xa800000, 0x0800000 },
-            
-            // on-cart X76F100 eeprom contents
-            //ROM_REGION( 0x84, "naomibd_eeprom", 0 )
-            //ROM_LOAD( "841-0003.sf",  0x000000, 0x000084, CRC(3a119a17) SHA1(d37a092cca7c9cfc5f2637b355af90a65d04013e) )
-            
             { NULL, 0, 0 },
         }
     },
@@ -2501,7 +2490,10 @@ Games[] =
             { "mpr-23125.ic8",  0x4000000, 0x0800000 },
             { "mpr-23126.ic9",  0x4800000, 0x0800000 },
             { NULL, 0, 0 },
-        }
+        },
+        NULL,
+        NULL,
+        pstone2_eeprom_dump
     },
     // Power Stone 2 (bootleg)
     {
@@ -2525,7 +2517,10 @@ Games[] =
             { "08.ic9",  0x4000000, 0x0800000 },
             { "09.ic10", 0x4800000, 0x0800000 },
             { NULL, 0, 0 },
-        }
+        },
+        NULL,
+        NULL,
+        pstone2_eeprom_dump
     },
     // Puyo Puyo Da! (Japan)
     {
@@ -3993,7 +3988,10 @@ Games[] =
             { "fpr-24439.ic10", 0x8000000, 0x4000000 },
             { "317-5131-jpn.ic3", 0, 0x800, Key },
             { NULL, 0, 0 },
-        }
+        },
+        NULL,
+        NULL,
+        illvelo_eeprom_dump
     },
     // Manic Panic Ghosts! *** BAD DUMP ***
     {
@@ -4038,7 +4036,10 @@ Games[] =
             { "ic10.bin", 0x8000000, 0x4000000 },
             { "317-5132-jpn.ic3", 0, 0x800, Key },
             { NULL, 0, 0 },
-        }
+        },
+        NULL,
+        NULL,
+        mamonoro_eeprom_dump
     },
     // Melty Blood Actress Again Version A (Japan, Rev A)
     {
@@ -4224,7 +4225,10 @@ Games[] =
             { "fpr-24416.ic11", 0xc000000, 0x4000000 },
             { "317-5129-jpn.ic3", 0, 0x800, Key },
             { NULL, 0, 0 },
-        }
+        },
+        NULL,
+        NULL,
+        sl2007_eeprom_dump
     },
     // Touch De Zunou (Rev A) *** BAD DUMP ***
     {
@@ -4412,6 +4416,74 @@ Games[] =
             { NULL, 0, 0 },
         },
         "gdl-0007a",
+    },
+    // Dragon Treasure (Rev B) (GDS-0030B)
+    {
+        "dragntr",
+        NULL,
+        0x4000,
+        0,
+        "naomi",
+        GD,
+        REGION_AUSTRALIA,
+        ROT0,
+        {
+            { "317-0363-com.pic", 0, 0x4000 },
+            //{ "317-0364-com.pic", 0, 0x4000 },
+            { NULL, 0, 0 },
+        },
+        "gds-0030b",
+    },
+    // Dragon Treasure (Rev A) (GDS-0030A)
+    {
+        "dragntra",
+        "dragntr",
+        0x4000,
+        0,
+        "naomi",
+        GD,
+        REGION_AUSTRALIA,
+        ROT0,
+        {
+            { "317-0363-com.pic", 0, 0x4000 },
+            //{ "317-0364-com.pic", 0, 0x4000 },
+            { NULL, 0, 0 },
+        },
+        "gds-0030a",
+    },
+    // Dragon Treasure 2 (Rev A) (GDS-0037A)
+    {
+        "dragntr2",
+        NULL,
+        0x4000,
+        0,
+        "naomi",
+        GD,
+        REGION_AUSTRALIA,
+        ROT0,
+        {
+            { "317-0389-com.pic", 0, 0x4000 },
+            //{ "317-0390-com.pic", 0, 0x4000 },
+            { NULL, 0, 0 },
+        },
+        "gds-0037a",
+    },
+    // Dragon Treasure 3 (Rev A) (GDS-0041A)
+    {
+        "dragntr3",
+        NULL,
+        0x4000,
+        0,
+        "naomi",
+        GD,
+        REGION_AUSTRALIA,
+        ROT0,
+        {
+            { "317-0426-jpn.pic", 0, 0x4000 },
+            //{ "317-0390-com.pic", 0, 0x4000 },
+            { NULL, 0, 0 },
+        },
+        "gds-0041a",
     },
     // Virtua Golf / Dynamic Golf (Rev A) (GDS-0009A)
     {
