@@ -19,6 +19,7 @@
     along with reicast.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "ZipArchive.h"
+#include <file/file_path.h>
 
 ZipArchive::~ZipArchive()
 {

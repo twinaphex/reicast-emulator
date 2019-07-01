@@ -9,6 +9,7 @@
 #include <string>
 #include <iomanip>
 #include <cctype>
+#include <streams/file_stream.h>
 
 #define TRUE 1
 #define FALSE 0
@@ -18,7 +19,8 @@
 #include <sstream>
 
 struct CORE_FILE {
-	FILE* f;
+	RFILE *f;
+
 	string path;
 	size_t seek_ptr;
 
@@ -33,13 +35,12 @@ core_file* core_fopen(const char* filename)
 	CORE_FILE* rv = new CORE_FILE();
 	rv->f = 0;
 	rv->path = p;
-  {
-		rv->f = fopen(filename, "rb");
 
-		if (!rv->f) {
-			delete rv;
-			return 0;
-		}
+	rv->f = filestream_open(filename, RETRO_VFS_FILE_ACCESS_READ, RETRO_VFS_FILE_ACCESS_HINT_NONE);
+
+	if (!rv->f) {
+		delete rv;
+		return 0;
 	}
 
 	core_fseek((core_file*)rv, 0, SEEK_SET);
@@ -57,7 +58,7 @@ size_t core_fseek(core_file* fc, size_t offs, size_t origin) {
 		die("Invalid code path");
 
 	if (f->f)
-		fseek(f->f, f->seek_ptr, SEEK_SET);
+		filestream_seek(f->f, f->seek_ptr, RETRO_VFS_SEEK_POSITION_START);
 
 	return 0;
 }
@@ -70,9 +71,8 @@ size_t core_ftell(core_file* fc)
 int core_fread(core_file* fc, void* buff, size_t len)
 {
 	CORE_FILE* f = (CORE_FILE*)fc;
-
 	if (f->f)
-		fread(buff,1,len,f->f);
+		filestream_read(f->f, buff, len);
 
 	f->seek_ptr += len;
 
@@ -84,7 +84,7 @@ int core_fclose(core_file* fc)
    CORE_FILE* f = (CORE_FILE*)fc;
 
    if (f->f)
-      fclose(f->f);
+   	filestream_close(f->f);
 
    delete f;
 
@@ -96,10 +96,10 @@ size_t core_fsize(core_file* fc)
    CORE_FILE* f = (CORE_FILE*)fc;
 
    if (f->f) {
-      size_t p=ftell(f->f);
-      fseek(f->f,0,SEEK_END);
-      size_t rv=ftell(f->f);
-      fseek(f->f,p,SEEK_SET);
+   	size_t p = filestream_tell(f->f);
+   	filestream_seek(f->f, 0, RETRO_VFS_SEEK_POSITION_END);
+		size_t rv = filestream_tell(f->f);
+      filestream_seek(f->f, p, RETRO_VFS_SEEK_POSITION_START);
       return rv;
    }
    return 0;

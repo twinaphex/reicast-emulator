@@ -7,9 +7,10 @@
 #endif
 
 #include <sys/stat.h>
-#include <retro_stat.h>
+#include <file/file_path.h>
 
 #include <libretro.h>
+#include <streams/file_stream.h>
 
 #if defined(HAVE_OPENGL) || defined(HAVE_OPENGLES)
 #include <glsm/glsm.h>
@@ -323,6 +324,7 @@ CORE_OPTION_NAME "_lightgun" #num "_crosshair", \
 void retro_set_environment(retro_environment_t cb)
 {
    environ_cb = cb;
+   struct retro_vfs_interface_info vfs_iface_info;
 
    struct retro_variable variables[] = {
 #if ((FEAT_SHREC == DYNAREC_JIT && HOST_CPU == CPU_X86) || (HOST_CPU == CPU_ARM) || (HOST_CPU == CPU_ARM64) || (HOST_CPU == CPU_X64) || TARGET_NO_JIT)
@@ -541,6 +543,11 @@ void retro_set_environment(retro_environment_t cb)
            { 0 },
    };
    environ_cb(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, (void*)ports);
+
+   vfs_iface_info.required_interface_version = 1;
+   vfs_iface_info.iface                      = NULL;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VFS_INTERFACE, &vfs_iface_info))
+	   filestream_vfs_init(&vfs_iface_info);
 }
 
 void retro_keyboard_event(bool down, unsigned keycode, uint32_t character, uint16_t key_modifiers);
@@ -1874,7 +1881,7 @@ bool retro_load_game(const struct retro_game_info *game)
       struct stat buf;
       if (stat(data_dir, &buf) < 0)
       {
-         mkdir_norecurse(data_dir);
+         path_mkdir(data_dir);
       }
    }
 
@@ -1939,7 +1946,7 @@ bool retro_load_game(const struct retro_game_info *game)
          if (stat(save_dir, &buf) < 0)
          {
             log_cb(RETRO_LOG_INFO, "Creating dir: %s\n", save_dir);
-            mkdir_norecurse(save_dir);
+            path_mkdir(save_dir);
          }
       } else {
          strncpy(save_dir, g_roms_dir, sizeof(save_dir));

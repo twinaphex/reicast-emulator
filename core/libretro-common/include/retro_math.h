@@ -1,7 +1,7 @@
-/* Copyright  (C) 2010-2016 The RetroArch team
+/* Copyright  (C) 2010-2018 The RetroArch team
  *
  * ---------------------------------------------------------------------------------------
- * The following license statement only applies to this file (retro_stat.h).
+ * The following license statement only applies to this file (retro_math.h).
  * ---------------------------------------------------------------------------------------
  *
  * Permission is hereby granted, free of charge,
@@ -20,44 +20,75 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#ifndef __RETRO_STAT_H
-#define __RETRO_STAT_H
+#ifndef _LIBRETRO_COMMON_MATH_H
+#define _LIBRETRO_COMMON_MATH_H
 
 #include <stdint.h>
-#include <stddef.h>
 
-#include <retro_common_api.h>
+#if defined(_WIN32) && !defined(_XBOX)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#elif defined(_WIN32) && defined(_XBOX)
+#include <Xtl.h>
+#endif
 
-#include <boolean.h>
+#include <limits.h>
 
-RETRO_BEGIN_DECLS
+#ifdef _MSC_VER
+#include <compat/msvc.h>
+#endif
+#include <retro_inline.h>
+
+#ifndef M_PI
+#if !defined(USE_MATH_DEFINES)
+#define M_PI 3.14159265358979323846264338327
+#endif
+#endif
+
+#ifndef MAX
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#endif
+
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
 
 /**
- * path_is_directory:
- * @path               : path
+ * next_pow2:
+ * @v         : initial value
  *
- * Checks if path is a directory.
+ * Get next power of 2 value based on  initial value.
  *
- * Returns: true (1) if path is a directory, otherwise false (0).
- */
-bool path_is_directory(const char *path);
-
-bool path_is_character_special(const char *path);
-
-bool path_is_valid(const char *path);
-
-int32_t path_get_size(const char *path);
-
-/**
- * path_mkdir_norecurse:
- * @dir                : directory
- *
- * Create directory on filesystem.
- *
- * Returns: true (1) if directory could be created, otherwise false (0).
+ * Returns: next power of 2 value (derived from @v).
  **/
-bool mkdir_norecurse(const char *dir);
+static INLINE uint32_t next_pow2(uint32_t v)
+{
+   v--;
+   v |= v >> 1;
+   v |= v >> 2;
+   v |= v >> 4;
+   v |= v >> 8;
+   v |= v >> 16;
+   v++;
+   return v;
+}
 
-RETRO_END_DECLS
+/**
+ * prev_pow2:
+ * @v         : initial value
+ *
+ * Get previous power of 2 value based on initial value.
+ *
+ * Returns: previous power of 2 value (derived from @v).
+ **/
+static INLINE uint32_t prev_pow2(uint32_t v)
+{
+   v |= v >> 1;
+   v |= v >> 2;
+   v |= v >> 4;
+   v |= v >> 8;
+   v |= v >> 16;
+   return v - (v >> 1);
+}
 
 #endif
