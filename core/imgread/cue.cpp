@@ -68,21 +68,32 @@ Disc* cue_parse(const wchar* file)
 	istringstream cuesheet(cue_data);
 
 	char path[512];
-	strcpy(path, file);
-	ssize_t len = strlen(file);
-	while (len >= 0)
+	char* pathptr;
+	if (!strncmp("cdrom://", file, 8))
 	{
-		if (path[len]=='\\' || path[len]=='/')
-			break;
-		len--;
+		// No relative path for physical cdrom
+		pathptr = path;
 	}
-	len++;
-	char* pathptr = &path[len];
+	else
+	{
+		strcpy(path, file);
+		ssize_t len = strlen(file);
+		while (len >= 0)
+		{
+			if (path[len]=='\\' || path[len]=='/')
+				break;
+			len--;
+		}
+		len++;
+		pathptr = &path[len];
+	}
 
 	u32 current_fad = 150;
 	string track_filename;
 	u32 track_number = -1;
 	string track_type;
+	bool gdrom = false;
+	bool cdda = true;
 
 	while (!cuesheet.eof())
 	{
@@ -95,6 +106,7 @@ Disc* cue_parse(const wchar* file)
 			if (token == "HIGH-DENSITY")
 			{
 				current_fad = 45000 + 150;
+				gdrom = true;
 			}
 			else if (token != "SINGLE-DENSITY")
 				printf("CUE parse error: unrecognized REM token %s. Expected SINGLE-DENSITY or HIGH-DENSITY\n", token.c_str());
@@ -145,6 +157,15 @@ Disc* cue_parse(const wchar* file)
 				t.ADDR = 0;
 				t.StartFAD = current_fad;
 				t.EndFAD = 0;
+				if (track_type == "AUDIO")
+				{
+					t.CTRL = 0;
+				}
+				else
+				{
+					t.CTRL = 4;
+					cdda = false;
+				}
 				strcpy(pathptr, track_filename.c_str());
 
 				core_file* track_file = core_fopen(path);
@@ -159,9 +180,10 @@ Disc* cue_parse(const wchar* file)
 					printf("CUE file: track %d has unknown sector type: %s\n", track_number, track_type.c_str());
 					return NULL;
 				}
-				if (core_fsize(track_file) % sector_size != 0)
+				size_t track_size = core_fsize(track_file);
+				if (track_size % sector_size != 0)
 					printf("Warning: Size of track %s is not multiple of sector size %d\n", track_filename.c_str(), sector_size);
-				current_fad = t.StartFAD + (u32)core_fsize(track_file) / sector_size;
+				current_fad = t.StartFAD + (u32)track_size / sector_size;
 				
 				//printf("file[%lu] \"%s\": StartFAD:%d, sector_size:%d file_size:%d\n", disc->tracks.size(),
 				//		track_filename.c_str(), t.StartFAD, sector_size, (u32)core_fsize(track_file));
@@ -177,7 +199,27 @@ Disc* cue_parse(const wchar* file)
 
 	}
 
-	disc->FillGDSession();
+	if (gdrom)
+	{
+		disc->FillGDSession();
+	}
+	else
+	{
+		Session ses;
+
+		//session 1 : start @ track 1, and its fad
+		ses.FirstTrack = 1;
+		ses.StartFAD = disc->tracks[0].StartFAD;
+		disc->sessions.push_back(ses);
+
+		disc->type = cdda ? CdDA : CdRom;
+		disc->LeadOut.ADDR = 0;
+		disc->LeadOut.CTRL = 0;
+		disc->LeadOut.StartFAD = current_fad;
+
+		disc->EndFAD = current_fad;
+
+	}
 
 	return disc;
 }
