@@ -185,8 +185,8 @@ Disc* cue_parse(const wchar* file)
 					printf("Warning: Size of track %s is not multiple of sector size %d\n", track_filename.c_str(), sector_size);
 				current_fad = t.StartFAD + (u32)track_size / sector_size;
 				
-				//printf("file[%lu] \"%s\": StartFAD:%d, sector_size:%d file_size:%d\n", disc->tracks.size(),
-				//		track_filename.c_str(), t.StartFAD, sector_size, (u32)core_fsize(track_file));
+				//printf("file[%zu] \"%s\": StartFAD:%d, sector_size:%d file_size:%zd\n", disc->tracks.size(),
+				//		track_filename.c_str(), t.StartFAD, sector_size, track_size);
 
 				t.file = new RawTrackFile(track_file, 0, t.StartFAD, sector_size);
 				disc->tracks.push_back(t);
@@ -212,7 +212,23 @@ Disc* cue_parse(const wchar* file)
 		ses.StartFAD = disc->tracks[0].StartFAD;
 		disc->sessions.push_back(ses);
 
-		disc->type = cdda ? CdDA : CdRom;
+		if (!cdda)
+		{
+			if (disc->tracks.size() > 1)
+			{
+				//session 2 : start @ track 2, and its fad
+				ses.FirstTrack = 2;
+				ses.StartFAD = disc->tracks[1].StartFAD;
+				disc->sessions.push_back(ses);
+				disc->type = CdRom_XA;
+			}
+			else
+			{
+				disc->type = CdRom;
+			}
+		}
+		else
+			disc->type = CdDA;
 		disc->LeadOut.ADDR = 0;
 		disc->LeadOut.CTRL = 0;
 		disc->LeadOut.StartFAD = current_fad;
