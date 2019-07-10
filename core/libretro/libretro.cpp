@@ -18,6 +18,7 @@
 #include "../hw/sh4/sh4_mem.h"
 #include "../hw/sh4/sh4_sched.h"
 #include "keyboard_map.h"
+#include "hw/maple/maple_cfg.h"
 #include "hw/maple/maple_if.h"
 #include "../hw/pvr/spg.h"
 #include "../hw/naomi/naomi_cart.h"
@@ -29,6 +30,10 @@ char slash = '\\';
 #else
 char slash = '/';
 #endif
+
+#define RETRO_DEVICE_TWINSTICK				RETRO_DEVICE_SUBCLASS( RETRO_DEVICE_JOYPAD, 1 )
+#define RETRO_DEVICE_TWINSTICK_SATURN		RETRO_DEVICE_SUBCLASS( RETRO_DEVICE_JOYPAD, 2 )
+#define RETRO_DEVICE_ASCIISTICK				RETRO_DEVICE_SUBCLASS( RETRO_DEVICE_JOYPAD, 3 )
 
 #define RETRO_ENVIRONMENT_RETROARCH_START_BLOCK 0x800000
 
@@ -62,6 +67,8 @@ static int trigger_deadzone = 0;
 static bool digital_triggers = false;
 static bool allow_service_buttons = false;
 
+static bool libretro_supports_bitmasks = false;
+
 u32 kcode[4] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
 u8 rt[4] = {0, 0, 0, 0};
 u8 lt[4] = {0, 0, 0, 0};
@@ -79,6 +86,8 @@ bool enable_purupuru = true;
 static u32 vib_stop_time[4];
 static double vib_strength[4];
 static double vib_delta[4];
+
+unsigned per_content_vmus = 0;
 
 static bool first_run = true;
 
@@ -145,6 +154,8 @@ char *game_data;
 char g_base_name[128];
 char game_dir[1024];
 char game_dir_no_slash[1024];
+char vmu_dir_no_slash[PATH_MAX];
+char content_name[PATH_MAX];
 char g_roms_dir[PATH_MAX];
 static bool emu_in_thread = false;
 static bool performed_serialization = false;
@@ -272,32 +283,41 @@ static void input_set_deadzone_trigger( int percent )
 		"LIGHT_YELLOW_2 27|" \
 		"WHITE 28" \
 
+#define CORE_OPTION_NAME "reicast"
+
 #define VMU_SCREEN_PARAMS(num)       { \
-"reicast_vmu" #num "_screen_display", \
+CORE_OPTION_NAME "_vmu" #num "_screen_display", \
 "VMU Screen " #num " Display; disabled|enabled" \
 }, \
 { \
-"reicast_vmu" #num "_screen_position", \
+CORE_OPTION_NAME "_vmu" #num "_screen_position", \
 "VMU Screen " #num " Position; Upper Left|Upper Right|Lower Left|Lower Right" \
 }, \
 { \
-"reicast_vmu" #num "_screen_size_mult", \
+CORE_OPTION_NAME "_vmu" #num "_screen_size_mult", \
 "VMU Screen " #num " Size; 1x|2x|3x|4x|5x" \
 }, \
 { \
-"reicast_vmu" #num "_pixel_on_color", \
+CORE_OPTION_NAME "_vmu" #num "_pixel_on_color", \
 "VMU Screen " #num " Pixel On Color; " "DEFAULT_ON 00|DEFAULT_OFF 01|" \
 COLORS_STRING \
 }, \
 { \
-"reicast_vmu" #num "_pixel_off_color", \
+CORE_OPTION_NAME "_vmu" #num "_pixel_off_color", \
 "VMU Screen " #num " Pixel Off Color; " "DEFAULT_OFF 01|DEFAULT_ON 00|" \
 COLORS_STRING \
 }, \
 { \
-"reicast_vmu" #num "_screen_opacity", \
+CORE_OPTION_NAME "_vmu" #num "_screen_opacity", \
 "VMU Screen " #num " Opacity; 100%|90%|80%|70%|60%|50%|40%|30%|20%|10%" \
 }, \
+
+
+#define LIGHTGUN_PARAMS(num)       { \
+CORE_OPTION_NAME "_lightgun" #num "_crosshair", \
+"Gun Crosshair " #num " Display; disabled|White|Red|Green|Blue" \
+}, \
+
 
 
 void retro_set_environment(retro_environment_t cb)
@@ -307,7 +327,7 @@ void retro_set_environment(retro_environment_t cb)
    struct retro_variable variables[] = {
 #if ((FEAT_SHREC == DYNAREC_JIT && HOST_CPU == CPU_X86) || (HOST_CPU == CPU_ARM) || (HOST_CPU == CPU_ARM64) || (HOST_CPU == CPU_X64) || TARGET_NO_JIT)
       {
-         "reicast_cpu_mode",
+         CORE_OPTION_NAME "_cpu_mode",
          "CPU Mode (restart); "
 #if (FEAT_SHREC == DYNAREC_JIT && HOST_CPU == CPU_X86) || (HOST_CPU == CPU_ARM) || (HOST_CPU == CPU_ARM64) || (HOST_CPU == CPU_X64)
             "dynamic_recompiler"
@@ -320,21 +340,21 @@ void retro_set_environment(retro_environment_t cb)
       },
 #endif
       {
-         "reicast_boot_to_bios",
+         CORE_OPTION_NAME "_boot_to_bios",
          "Boot to BIOS (restart); disabled|enabled",
       },
       {
-         "reicast_system",
+         CORE_OPTION_NAME "_system",
          "System type (restart); auto|dreamcast|naomi|atomiswave",
       },
 #ifdef HAVE_OIT
       {
-         "reicast_oit_abuffer_size",
+         CORE_OPTION_NAME "_oit_abuffer_size",
          "Accumulation pixel buffer size (restart); 512MB|1GB|2GB",
       },
 #endif
       {
-         "reicast_internal_resolution",
+         CORE_OPTION_NAME "_internal_resolution",
 #ifdef LOW_RES
          "Internal resolution (restart); 320x240|640x480|1280x960|1440x1080|1920x1440|2560x1920|2880x2160|3200x2400|3840x2880|4480x3360|5120x3840|5760x4320|6400x4800|7040x5280|7680x5760|8320x6240|8960x6720|9600x7200|10240x7680|10880x8160|11520x8640|12160x9120|12800x9600",
 #else
@@ -342,11 +362,11 @@ void retro_set_environment(retro_environment_t cb)
 #endif
       },
       {
-         "reicast_screen_rotation",
+         CORE_OPTION_NAME "_screen_rotation",
          "Screen orientation; horizontal|vertical",
       },
       {
-    	 "reicast_alpha_sorting",
+    	 CORE_OPTION_NAME "_alpha_sorting",
 #ifdef LOW_END
          "Alpha sorting; per-strip (fast, least accurate)|per-triangle (normal)",
 #else
@@ -358,7 +378,7 @@ void retro_set_environment(retro_environment_t cb)
 #endif
       },
       {
-         "reicast_gdrom_fast_loading",
+         CORE_OPTION_NAME "_gdrom_fast_loading",
 #ifdef LOW_END
          "GDROM Fast Loading (inaccurate); enabled|disabled",
 #else
@@ -366,23 +386,19 @@ void retro_set_environment(retro_environment_t cb)
 #endif
       },
       {
-         "reicast_mipmapping",
+         CORE_OPTION_NAME "_mipmapping",
          "Mipmapping; enabled|disabled",
       },
       {
-         "reicast_volume_modifier_enable",
+         CORE_OPTION_NAME "_volume_modifier_enable",
          "Volume modifier; enabled|disabled",
       },
       {
-         "reicast_widescreen_hack",
+         CORE_OPTION_NAME "_widescreen_hack",
          "Widescreen hack (restart); disabled|enabled",
       },
       {
-         "reicast_audio_buffer_size",
-         "Audio buffer size; 1024|2048",
-      },
-      {
-         "reicast_cable_type",
+         CORE_OPTION_NAME "_cable_type",
 #ifdef LOW_END
          "Cable type; VGA (RGB)|TV (RGB)|TV (Composite)",	
 #else
@@ -390,23 +406,23 @@ void retro_set_environment(retro_environment_t cb)
 #endif
       },
       {
-         "reicast_broadcast",
+         CORE_OPTION_NAME "_broadcast",
          "Broadcast; Default|PAL_M|PAL_N|NTSC|PAL",
       },
       {
-         "reicast_framerate",
+         CORE_OPTION_NAME "_framerate",
          "Framerate; fullspeed|normal",
       },
       {
-         "reicast_region",
+         CORE_OPTION_NAME "_region",
          "Region; Default|Japan|USA|Europe",
       },
       {
-         "reicast_language",
+         CORE_OPTION_NAME "_language",
          "Language; Default|Japanese|English|German|French|Spanish|Italian",
       },
       {
-         "reicast_div_matching",
+         CORE_OPTION_NAME "_div_matching",
 #ifdef LOW_END
          "DIV matching (performance, less accurate); enabled|disabled|auto",
 #else
@@ -414,19 +430,23 @@ void retro_set_environment(retro_environment_t cb)
 #endif
       },
       {
-         "reicast_analog_stick_deadzone",
+         CORE_OPTION_NAME "_analog_stick_deadzone",
          "Analog Stick Deadzone; 15%|20%|25%|30%|0%|5%|10%"
       },
       {
-         "reicast_trigger_deadzone",
+         CORE_OPTION_NAME "_trigger_deadzone",
          "Trigger Deadzone; 0%|5%|10%|15%|20%|25%|30%"
       },
       {
-         "reicast_digital_triggers",
+         CORE_OPTION_NAME "_digital_triggers",
          "Digital Triggers; disabled|enabled",
       },
+      LIGHTGUN_PARAMS(1)
+      LIGHTGUN_PARAMS(2)
+      LIGHTGUN_PARAMS(3)
+      LIGHTGUN_PARAMS(4)
       {
-         "reicast_enable_dsp",
+         CORE_OPTION_NAME "_enable_dsp",
 #ifdef LOW_END
          "Enable DSP; disabled|enabled",
 #else
@@ -435,55 +455,63 @@ void retro_set_environment(retro_environment_t cb)
       },
 #ifdef HAVE_TEXUPSCALE
       {
-         "reicast_texupscale",
+         CORE_OPTION_NAME "_texupscale",
          "Texture upscaling (xBRZ); off|2x|4x|6x",
       },
       {
-         "reicast_texupscale_max_filtered_texture_size",
+         CORE_OPTION_NAME "_texupscale_max_filtered_texture_size",
          "Texture upscaling max filtered size; 256|512|1024",
       },
 #endif
       {
-         "reicast_enable_rtt",
+         CORE_OPTION_NAME "_enable_rtt",
          "Enable RTT (Render To Texture); enabled|disabled",
       },
       {
-         "reicast_enable_rttb",
+         CORE_OPTION_NAME "_enable_rttb",
          "Enable RTT (Render To Texture) Buffer; disabled|enabled",
       },
       {
-         "reicast_render_to_texture_upscaling",
+         CORE_OPTION_NAME "_render_to_texture_upscaling",
          "Render To Texture Upscaling; 1x|2x|3x|4x|8x",
       },
 #if !defined(TARGET_NO_THREADS)
       {
-         "reicast_threaded_rendering",
+         CORE_OPTION_NAME "_threaded_rendering",
          "Threaded rendering (restart); enabled|disabled",
       },
       {
-         "reicast_synchronous_rendering",
+         CORE_OPTION_NAME "_synchronous_rendering",
          "Synchronous rendering; disabled|enabled",
       },
 #endif
       {
-         "reicast_frame_skipping",
+         CORE_OPTION_NAME "_frame_skipping",
          "Frame skipping; disabled|1|2|3|4|5|6",
       },
       {
-         "reicast_enable_purupuru",
+         CORE_OPTION_NAME "_enable_purupuru",
          "Purupuru Pack; enabled|disabled"
       },
       {
-         "reicast_allow_service_buttons",
+         CORE_OPTION_NAME "_allow_service_buttons",
          "Allow Naomi service buttons; disabled|enabled"
       },
       {
-         "reicast_custom_textures",
+         CORE_OPTION_NAME "_enable_naomi_15khz_dipswitch",
+         "Enable Naomi 15khz dipswitch (480i); disabled|enabled"
+      },
+      {
+         CORE_OPTION_NAME "_custom_textures",
          "Load custom textures; disabled|enabled"
       },
       {
-         "reicast_dump_textures",
+         CORE_OPTION_NAME "_dump_textures",
          "Dump textures; disabled|enabled"
+      },
+      {
+         CORE_OPTION_NAME "_per_content_vmus",
+         "Per-game VMUs; disabled|VMU A1|All VMUs"
       },
 	  VMU_SCREEN_PARAMS(1)
 	  VMU_SCREEN_PARAMS(2)
@@ -496,18 +524,20 @@ void retro_set_environment(retro_environment_t cb)
 
    static const struct retro_controller_description ports_default[] =
    {
-		 { "Gamepad",		RETRO_DEVICE_JOYPAD },
+		 { "Controller",	RETRO_DEVICE_JOYPAD },
+		 { "Arcade Stick",	RETRO_DEVICE_ASCIISTICK },
 		 { "Keyboard",		RETRO_DEVICE_KEYBOARD },
 		 { "Mouse",			RETRO_DEVICE_MOUSE },
 		 { "Light Gun",		RETRO_DEVICE_LIGHTGUN },
-		 { "Disconnected",	RETRO_DEVICE_NONE },
+		 { "Twin Stick",	RETRO_DEVICE_TWINSTICK },
+		 { "Saturn Twin-Stick",	RETRO_DEVICE_TWINSTICK_SATURN },
 		 { 0 },
    };
    static const struct retro_controller_info ports[] = {
-           { ports_default,  4 },
-           { ports_default,  4 },
-           { ports_default,  4 },
-           { ports_default,  4 },
+           { ports_default,  7 },
+           { ports_default,  7 },
+           { ports_default,  7 },
+           { ports_default,  7 },
            { 0 },
    };
    environ_cb(RETRO_ENVIRONMENT_SET_CONTROLLER_INFO, (void*)ports);
@@ -541,6 +571,9 @@ void retro_init(void)
    init_kb_map();
    struct retro_keyboard_callback kb_callback = { &retro_keyboard_event };
    environ_cb(RETRO_ENVIRONMENT_SET_KEYBOARD_CALLBACK, &kb_callback);
+
+   if (environ_cb(RETRO_ENVIRONMENT_GET_INPUT_BITMASKS, NULL))
+      libretro_supports_bitmasks = true;
 }
 
 void retro_deinit(void)
@@ -552,6 +585,7 @@ void retro_deinit(void)
    mtx_serialization.Lock() ;
    mtx_serialization.Unlock() ;
 
+   libretro_supports_bitmasks = false;
 }
 
 static bool is_dupe = false;
@@ -564,7 +598,26 @@ static void update_variables(bool first_startup)
    int i ;
    char key[256] ;
 
-   var.key = "reicast_widescreen_hack";
+   var.key = CORE_OPTION_NAME "_per_content_vmus";
+   unsigned previous_per_content_vmus = per_content_vmus;
+   per_content_vmus = 0;
+
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp("VMU A1", var.value))
+         per_content_vmus = 1;
+      else if (!strcmp("All VMUs", var.value))
+         per_content_vmus = 2;
+   }
+
+   if ((per_content_vmus != previous_per_content_vmus) &&
+       (settings.System == DC_PLATFORM_DREAMCAST))
+   {
+      mcfg_DestroyDevices();
+      mcfg_CreateDevices();
+   }
+
+   var.key = CORE_OPTION_NAME "_widescreen_hack";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -576,14 +629,14 @@ static void update_variables(bool first_startup)
    else
       settings.rend.WideScreen = 0;
 
-   var.key = "reicast_screen_rotation";
+   var.key = CORE_OPTION_NAME "_screen_rotation";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && !strcmp("vertical", var.value))
    {
 	  rotate_screen = true;
 	  settings.rend.WideScreen = 0;
    }
 
-   var.key = "reicast_internal_resolution";
+   var.key = CORE_OPTION_NAME "_internal_resolution";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -618,7 +671,7 @@ static void update_variables(bool first_startup)
    }
 
 
-   var.key = "reicast_cpu_mode";
+   var.key = CORE_OPTION_NAME "_cpu_mode";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -628,7 +681,7 @@ static void update_variables(bool first_startup)
          settings.dynarec.Type = 1;
    }
 
-   var.key = "reicast_boot_to_bios";
+   var.key = CORE_OPTION_NAME "_boot_to_bios";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -640,7 +693,7 @@ static void update_variables(bool first_startup)
    else
       boot_to_bios = false;
 
-   var.key = "reicast_gdrom_fast_loading";
+   var.key = CORE_OPTION_NAME "_gdrom_fast_loading";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -652,7 +705,7 @@ static void update_variables(bool first_startup)
    else
       GDROM_TICK      = 1500000;
 
-   var.key = "reicast_alpha_sorting";
+   var.key = CORE_OPTION_NAME "_alpha_sorting";
    int previous_renderer = settings.pvr.rend;
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
@@ -681,7 +734,7 @@ static void update_variables(bool first_startup)
    if (!first_startup && previous_renderer != settings.pvr.rend)
 	  renderer_changed = true;
 
-   var.key = "reicast_mipmapping";
+   var.key = CORE_OPTION_NAME "_mipmapping";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -695,7 +748,7 @@ static void update_variables(bool first_startup)
 
    if (first_startup)
    {
-      var.key = "reicast_system";
+      var.key = CORE_OPTION_NAME "_system";
 
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       {
@@ -713,7 +766,7 @@ static void update_variables(bool first_startup)
 
 #ifdef HAVE_OIT
       extern GLuint pixel_buffer_size;
-      var.key = "reicast_oit_abuffer_size";
+      var.key = CORE_OPTION_NAME "_oit_abuffer_size";
 
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
       {
@@ -731,7 +784,7 @@ static void update_variables(bool first_startup)
 #endif
    }
 
-   var.key = "reicast_volume_modifier_enable";
+   var.key = CORE_OPTION_NAME "_volume_modifier_enable";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -743,17 +796,7 @@ static void update_variables(bool first_startup)
    else
       settings.pvr.Emulation.ModVol      = true;
 
-
-   var.key = "reicast_audio_buffer_size";
-
-   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
-   {
-      settings.aica.BufferSize = atoi(var.value);
-   }
-   else
-      settings.aica.BufferSize = 1024;
-
-   var.key = "reicast_cable_type";
+   var.key = CORE_OPTION_NAME "_cable_type";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -765,7 +808,7 @@ static void update_variables(bool first_startup)
          settings.dreamcast.cable = 3;
    }
 
-   var.key = "reicast_broadcast";
+   var.key = CORE_OPTION_NAME "_broadcast";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -783,7 +826,7 @@ static void update_variables(bool first_startup)
    else
          settings.dreamcast.broadcast = 4;
 
-   var.key = "reicast_framerate";
+   var.key = CORE_OPTION_NAME "_framerate";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -795,7 +838,7 @@ static void update_variables(bool first_startup)
    else
       settings.UpdateMode = 0;
 
-   var.key = "reicast_region";
+   var.key = CORE_OPTION_NAME "_region";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -811,7 +854,7 @@ static void update_variables(bool first_startup)
    else
          settings.dreamcast.region = 3;
 
-   var.key = "reicast_language";
+   var.key = CORE_OPTION_NAME "_language";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -833,7 +876,7 @@ static void update_variables(bool first_startup)
    else
          settings.dreamcast.language = 6;
 
-   var.key = "reicast_div_matching";
+   var.key = CORE_OPTION_NAME "_div_matching";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -855,7 +898,7 @@ static void update_variables(bool first_startup)
    }
 
 #ifdef HAVE_TEXUPSCALE
-   var.key = "reicast_texupscale";
+   var.key = CORE_OPTION_NAME "_texupscale";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -871,7 +914,7 @@ static void update_variables(bool first_startup)
    else if (first_startup)
       settings.rend.TextureUpscale = 1;
 
-   var.key = "reicast_texupscale_max_filtered_texture_size";
+   var.key = CORE_OPTION_NAME "_texupscale_max_filtered_texture_size";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -886,7 +929,7 @@ static void update_variables(bool first_startup)
       settings.rend.MaxFilteredTextureSize = 256;
 #endif
 
-   var.key = "reicast_enable_rtt";
+   var.key = CORE_OPTION_NAME "_enable_rtt";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -898,7 +941,7 @@ static void update_variables(bool first_startup)
    else
          settings.rend.RenderToTexture = true;
 
-   var.key = "reicast_enable_rttb";
+   var.key = CORE_OPTION_NAME "_enable_rttb";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -910,7 +953,7 @@ static void update_variables(bool first_startup)
    else
       settings.rend.RenderToTextureBuffer = false;
 
-   var.key = "reicast_render_to_texture_upscaling";
+   var.key = CORE_OPTION_NAME "_render_to_texture_upscaling";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -929,7 +972,7 @@ static void update_variables(bool first_startup)
    if (first_startup)
    {
 	   bool save_state_in_background = true ;
-	   var.key = "reicast_threaded_rendering";
+	   var.key = CORE_OPTION_NAME "_threaded_rendering";
 
 	   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
 	   {
@@ -947,7 +990,7 @@ static void update_variables(bool first_startup)
    }
 #endif
 
-   var.key = "reicast_synchronous_rendering";
+   var.key = CORE_OPTION_NAME "_synchronous_rendering";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
 	   if (!strcmp("enabled", var.value))
@@ -958,7 +1001,7 @@ static void update_variables(bool first_startup)
    else
 	   settings.pvr.SynchronousRendering = 0;
 
-   var.key = "reicast_frame_skipping";
+   var.key = CORE_OPTION_NAME "_frame_skipping";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
 	   if (!strcmp("disabled", var.value))
@@ -970,29 +1013,35 @@ static void update_variables(bool first_startup)
    else
 	   settings.pvr.ta_skip = 0;
 
-   var.key = "reicast_enable_purupuru";
+   var.key = CORE_OPTION_NAME "_enable_purupuru";
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
       if (enable_purupuru != (strcmp("enabled", var.value) == 0) && settings.System == DC_PLATFORM_DREAMCAST)
       {
       	enable_purupuru = (strcmp("enabled", var.value) == 0);
-      	maple_ReconnectDevices();
+      	if (!first_startup)
+      		maple_ReconnectDevices();
+	else
+	{
+      		mcfg_DestroyDevices();
+      		mcfg_CreateDevices();
+	}
       }
    }
 
-   var.key = "reicast_analog_stick_deadzone";
+   var.key = CORE_OPTION_NAME "_analog_stick_deadzone";
    var.value = NULL;
 
    if ( environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value )
       input_set_deadzone_stick( atoi( var.value ) );
 
-   var.key = "reicast_trigger_deadzone";
+   var.key = CORE_OPTION_NAME "_trigger_deadzone";
    var.value = NULL;
 
    if ( environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value )
       input_set_deadzone_trigger( atoi( var.value ) );
 
-   var.key = "reicast_enable_dsp";
+   var.key = CORE_OPTION_NAME "_enable_dsp";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -1013,7 +1062,7 @@ static void update_variables(bool first_startup)
       settings.aica.NoBatch    = 1;
    }
 
-   var.key = "reicast_digital_triggers";
+   var.key = CORE_OPTION_NAME "_digital_triggers";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -1025,7 +1074,7 @@ static void update_variables(bool first_startup)
    else
       digital_triggers = false;
 
-   var.key = "reicast_allow_service_buttons";
+   var.key = CORE_OPTION_NAME "_allow_service_buttons";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -1037,7 +1086,19 @@ static void update_variables(bool first_startup)
    else
       allow_service_buttons = false;
 
-   var.key = "reicast_custom_textures";
+   var.key = CORE_OPTION_NAME "_enable_naomi_15khz_dipswitch";
+
+   if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
+   {
+      if (!strcmp("enabled", var.value))
+         enable_naomi_15khz_dipswitch = true;
+      else
+         enable_naomi_15khz_dipswitch = false;
+   }
+   else
+      enable_naomi_15khz_dipswitch = false;
+
+   var.key = CORE_OPTION_NAME "_custom_textures";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -1049,7 +1110,7 @@ static void update_variables(bool first_startup)
    else
 	  settings.rend.CustomTextures = false;
 
-   var.key = "reicast_dump_textures";
+   var.key = CORE_OPTION_NAME "_dump_textures";
 
    if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value)
    {
@@ -1066,6 +1127,28 @@ static void update_variables(bool first_startup)
    var.key = key ;
    for ( i = 0 ; i < 4 ; i++)
    {
+      lightgun_params[i].offscreen = true;	   
+      lightgun_params[i].x = 0;	   
+      lightgun_params[i].y = 0;	   
+      lightgun_params[i].dirty = true;	   
+      lightgun_params[i].colour = i+1;	   
+
+      snprintf(key, sizeof(key), CORE_OPTION_NAME "_lightgun%d_crosshair", i+1) ;
+
+      if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value  )
+      {
+         if (!strcmp("disabled", var.value))
+        	 lightgun_params[i].colour = LIGHTGUN_COLOR_OFF;
+         else if (!strcmp("White", var.value))
+        	 lightgun_params[i].colour = LIGHTGUN_COLOR_WHITE;
+         else if (!strcmp("Red", var.value))
+        	 lightgun_params[i].colour = LIGHTGUN_COLOR_RED;
+         else if (!strcmp("Green", var.value))
+        	 lightgun_params[i].colour = LIGHTGUN_COLOR_GREEN;
+         else if (!strcmp("Blue", var.value))
+        	 lightgun_params[i].colour = LIGHTGUN_COLOR_BLUE;
+      }
+	   
       vmu_screen_params[i].vmu_screen_display = false ;
       vmu_screen_params[i].vmu_screen_position = UPPER_LEFT ;
       vmu_screen_params[i].vmu_screen_size_mult = 1 ;
@@ -1078,13 +1161,13 @@ static void update_variables(bool first_startup)
       vmu_screen_params[i].vmu_screen_opacity = 0xFF ;
       vmu_screen_params[i].vmu_screen_needs_update = true ;
 
-      snprintf(key, sizeof(key), "reicast_vmu%d_screen_display", i+1) ;
+      snprintf(key, sizeof(key), CORE_OPTION_NAME "_vmu%d_screen_display", i+1) ;
 
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && !strcmp("enabled", var.value) )
        	 vmu_screen_params[i].vmu_screen_display = true ;
 
 
-      snprintf(key, sizeof(key), "reicast_vmu%d_screen_position", i+1) ;
+      snprintf(key, sizeof(key), CORE_OPTION_NAME "_vmu%d_screen_position", i+1) ;
 
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value  )
       {
@@ -1098,7 +1181,7 @@ static void update_variables(bool first_startup)
         	 vmu_screen_params[i].vmu_screen_position = LOWER_RIGHT;
       }
 
-      snprintf(key, sizeof(key), "reicast_vmu%d_screen_size_mult", i+1) ;
+      snprintf(key, sizeof(key), CORE_OPTION_NAME "_vmu%d_screen_size_mult", i+1) ;
 
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value  )
       {
@@ -1114,7 +1197,7 @@ static void update_variables(bool first_startup)
         	 vmu_screen_params[i].vmu_screen_size_mult = 5;
       }
 
-      snprintf(key, sizeof(key), "reicast_vmu%d_screen_opacity", i+1) ;
+      snprintf(key, sizeof(key), CORE_OPTION_NAME "_vmu%d_screen_opacity", i+1) ;
 
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value  )
       {
@@ -1140,7 +1223,7 @@ static void update_variables(bool first_startup)
         	 vmu_screen_params[i].vmu_screen_opacity = 1*25.5;
       }
 
-      snprintf(key, sizeof(key), "reicast_vmu%d_pixel_on_color", i+1) ;
+      snprintf(key, sizeof(key), CORE_OPTION_NAME "_vmu%d_pixel_on_color", i+1) ;
 
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && strlen(var.value)>1 )
       {
@@ -1150,7 +1233,7 @@ static void update_variables(bool first_startup)
     	  vmu_screen_params[i].vmu_pixel_on_B = VMU_SCREEN_COLOR_MAP[color_idx].b ;
       }
 
-      snprintf(key, sizeof(key), "reicast_vmu%d_pixel_off_color", i+1) ;
+      snprintf(key, sizeof(key), CORE_OPTION_NAME "_vmu%d_pixel_off_color", i+1) ;
 
       if (environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && strlen(var.value)>1 )
       {
@@ -1588,6 +1671,7 @@ static void set_input_descriptors()
     		   desc[descriptor_index++] = { i, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2, name };
     		break;
     	 }
+  	 
       }
    }
    else
@@ -1610,6 +1694,37 @@ static void set_input_descriptors()
     		desc[descriptor_index++] = { i, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START,    "Start" };
     		desc[descriptor_index++] = { i, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X, "Analog X" };
     		desc[descriptor_index++] = { i, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y, "Analog Y" };
+    		break;
+ 
+ 		case MDT_TwinStick:
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,  "L-Stick Left" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_UP,    "L-Stick Up" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,  "L-Stick Down" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT, "L-Stick Right" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_B,     "R-Stick Down" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_A,     "R-Stick Right" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_X,     "R-Stick Up" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_Y,     "R-Stick Left" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_L,    "L Turbo" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_R,    "R Turbo" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_L2,    "L Trigger" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_R2,    "R Trigger" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_START,    "Start" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_SELECT,    "Special" };
+    		break;
+ 
+ 		case MDT_AsciiStick:
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_LEFT,  "Stick Left" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_UP,    "Stick Up" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_DOWN,  "Stick Down" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT, "Stick Right" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_B,     "A" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_A,     "B" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_X,     "Y" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_Y,     "X" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_L,    "C" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_R,    "Z" };
+    		desc[descriptor_index++] = { i, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_START,    "Start" };
     		break;
 
     	 case MDT_LightGun:
@@ -1642,11 +1757,24 @@ static void extract_basename(char *buf, const char *path, size_t size)
    buf[size - 1] = '\0';
 }
 
+static void remove_extension(char *buf, const char *path, size_t size)
+{
+   char *base;
+   strncpy(buf, path, size - 1);
+   buf[size - 1] = '\0';
+
+   base = strrchr(buf, '.');
+
+   if (base)
+      *base = '\0';
+}
+
 // Loading/unloading games
 bool retro_load_game(const struct retro_game_info *game)
 {
    glsm_ctx_params_t params = {0};
    const char *dir = NULL;
+   const char *vmu_dir = NULL;
 #ifdef _WIN32
    char slash = '\\';
 #else
@@ -1667,6 +1795,20 @@ bool retro_load_game(const struct retro_game_info *game)
 
    snprintf(game_dir, sizeof(game_dir), "%s%cdc%c", dir, slash, slash);
    snprintf(game_dir_no_slash, sizeof(game_dir_no_slash), "%s%cdc", dir, slash);
+
+   // Per-content VMU additions START
+   // > Get save directory
+   if (!(environ_cb(RETRO_ENVIRONMENT_GET_SAVE_DIRECTORY, &vmu_dir) && vmu_dir))
+      vmu_dir = game_dir;
+
+   snprintf(vmu_dir_no_slash, sizeof(vmu_dir_no_slash), "%s", vmu_dir);
+
+   // > Get content name
+   remove_extension(content_name, g_base_name, sizeof(content_name));
+
+   if (content_name[0] == '\0')
+      snprintf(content_name, sizeof(content_name), "vmu_save");
+   // Per-content VMU additions END
 
    settings.dreamcast.cable = 3;
    update_variables(true);
@@ -1813,7 +1955,7 @@ bool retro_load_game(const struct retro_game_info *game)
    if (dc_init(co_argc,co_argv))
    {
 	  if (log_cb)
-		 log_cb(RETRO_LOG_ERROR, "Reicast emulator initialization failed\n");
+		 log_cb(RETRO_LOG_ERROR, "Flycast emulator initialization failed\n");
 	  return false;
    }
    int rotation = rotate_screen ? 3 : 0;
@@ -1989,7 +2131,10 @@ bool retro_unserialize(const void * data, size_t size)
     CalculateSync();
 
     for ( i = 0 ; i < 4 ; i++)
+    {
        vmu_screen_params[i].vmu_screen_needs_update = true ;
+       lightgun_params[i].dirty = true ;
+    }
 
     performed_serialization = true ;
 
@@ -2025,7 +2170,7 @@ const char* retro_get_system_directory(void)
 
 void retro_get_system_info(struct retro_system_info *info)
 {
-   info->library_name = "Reicast";
+   info->library_name = "Flycast";
 #ifndef GIT_VERSION
 #define GIT_VERSION ""
 #endif
@@ -2045,8 +2190,8 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
    if(naomi_cart_GetRotation() == 3)
       info->geometry.aspect_ratio = 1 / info->geometry.aspect_ratio;
    int maximum = screen_width > screen_height ? screen_width : screen_height;
-   info->geometry.base_width   = screen_height;
-   info->geometry.base_height  = screen_width;
+   info->geometry.base_width   = screen_width;
+   info->geometry.base_height  = screen_height;
    info->geometry.max_width    = maximum;
    info->geometry.max_height   = maximum;
    if (rotate_screen)
@@ -2091,6 +2236,13 @@ void retro_set_controller_port_device(unsigned in_port, unsigned device)
 			case RETRO_DEVICE_JOYPAD:
 				maple_devices[in_port] = MDT_SegaController;
 				break;
+			case RETRO_DEVICE_TWINSTICK:
+			case RETRO_DEVICE_TWINSTICK_SATURN:
+				maple_devices[in_port] = MDT_TwinStick;
+				break;
+			case RETRO_DEVICE_ASCIISTICK:
+				maple_devices[in_port] = MDT_AsciiStick;
+				break;
 			case RETRO_DEVICE_KEYBOARD:
 				maple_devices[in_port] = MDT_Keyboard;
 				break;
@@ -2129,6 +2281,11 @@ static void refresh_devices(bool descriptors_only)
 					rumble.set_rumble_state(i, RETRO_RUMBLE_WEAK,   0);
 				}
 			}
+		}
+		if (settings.System != DC_PLATFORM_DREAMCAST)
+		{
+			mcfg_DestroyDevices();
+			mcfg_CreateDevices();
 		}
 	}
 }
@@ -2248,39 +2405,35 @@ static uint16_t apply_trigger_deadzone( uint16_t input )
 {
    if ( trigger_deadzone > 0 )
    {
-      static const int TRIGGER_MAX = 0x8000;
-      const float scale = ((float)TRIGGER_MAX/(float)(TRIGGER_MAX - trigger_deadzone));
-
       if ( input > trigger_deadzone )
       {
          // Re-scale analog range
-         float scaled = (input - trigger_deadzone)*scale;
+         static const int TRIGGER_MAX = 0x8000;
+         const float scale = ((float)TRIGGER_MAX/(float)(TRIGGER_MAX - trigger_deadzone));
+         float scaled      = (input - trigger_deadzone)*scale;
 
          input = (int)round(scaled);
-         if (input > +32767) {
+         if (input > +32767)
             input = +32767;
-         }
       }
       else
-      {
          input = 0;
-      }
    }
 
    return input;
 }
 
-static uint16_t get_analog_trigger( retro_input_state_t input_state_cb,
-                           int player_index,
-                           int id )
+static uint16_t get_analog_trigger(
+      int16_t ret,
+      retro_input_state_t input_state_cb,
+      int player_index,
+      int id )
 {
-   uint16_t trigger;
-
    // NOTE: Analog triggers were added Nov 2017. Not all front-ends support this
    // feature (or pre-date it) so we need to handle this in a graceful way.
 
    // First, try and get an analog value using the new libretro API constant
-   trigger = input_state_cb( player_index,
+   uint16_t trigger = input_state_cb( player_index,
                        RETRO_DEVICE_ANALOG,
                        RETRO_DEVICE_INDEX_ANALOG_BUTTON,
                        id );
@@ -2293,10 +2446,7 @@ static uint16_t get_analog_trigger( retro_input_state_t input_state_cb,
 
       // NOTE: If we're really just not holding the trigger, we're still going to get zero.
 
-      trigger = input_state_cb( player_index,
-                          RETRO_DEVICE_JOYPAD,
-                          0,
-                          id ) ? 0x7FFF : 0;
+      trigger = (ret & (1 << id)) ? 0x7FFF : 0;
    }
    else
    {
@@ -2309,14 +2459,35 @@ static uint16_t get_analog_trigger( retro_input_state_t input_state_cb,
    return trigger;
 }
 
-static void setDeviceButtonState(u32 port, int deviceType, int btnId)
-{
-   uint32_t dc_key = map_gamepad_button(deviceType, btnId);
-   bool is_down = input_cb(port, deviceType, 0, btnId);
-   if (is_down)
-	  kcode[port] &= ~dc_key;
-   else
-	  kcode[port] |= dc_key;
+#define setDeviceButtonState(port, deviceType, btnId) \
+{ \
+   uint32_t dc_key = map_gamepad_button(deviceType, btnId); \
+   bool is_down = input_cb(port, deviceType, 0, btnId); \
+   if (is_down) \
+	  kcode[port] &= ~dc_key; \
+   else \
+	  kcode[port] |= dc_key; \
+}
+
+#define setDeviceButtonStateMacro(ret, port, deviceType, btnId) \
+{ \
+   uint32_t dc_key = map_gamepad_button(deviceType, btnId); \
+   bool is_down    = ret & (1 << btnId); \
+   if (is_down) \
+	  kcode[port] &= ~dc_key; \
+   else \
+	  kcode[port] |= dc_key; \
+}
+
+// don't call map_gamepad_button, we supply the DC bit directly.
+#define setDeviceButtonStateDirectMacro(ret, port, deviceType, btnId, dc_bit) \
+{ \
+   uint32_t dc_key = 1 << dc_bit; \
+   bool is_down    = ret & (1 << btnId); \
+   if (is_down) \
+	  kcode[port] &= ~dc_key; \
+   else \
+	  kcode[port] |= dc_key; \
 }
 
 static void updateMouseState(u32 port)
@@ -2324,7 +2495,7 @@ static void updateMouseState(u32 port)
    mo_x_delta[port] = input_cb(port, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
    mo_y_delta[port] = input_cb(port, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
 
-   bool btn_state = input_cb(port, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
+   bool btn_state   = input_cb(port, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
    if (btn_state)
 	  mo_buttons[port] &= ~(1 << 2);
    else
@@ -2394,33 +2565,44 @@ static void UpdateInputStateNaomi(u32 port)
 	  break;
 
    default:
+     int16_t ret = 0;
 	  //
 	  // -- buttons
+     {
+        if (libretro_supports_bitmasks)
+           ret = input_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
+        else
+        {
+           for (id = RETRO_DEVICE_ID_JOYPAD_B; id <= RETRO_DEVICE_ID_JOYPAD_R3; ++id)
+              if (input_cb(port, RETRO_DEVICE_JOYPAD, 0, id))
+                 ret |= (1 << id);
+        }
 
-	  for (id = RETRO_DEVICE_ID_JOYPAD_B; id <= RETRO_DEVICE_ID_JOYPAD_R3; ++id)
-	  {
-		 switch (id)
-		 {
-		 case RETRO_DEVICE_ID_JOYPAD_L3:
-			if (allow_service_buttons)
-			   setDeviceButtonState(port, RETRO_DEVICE_JOYPAD, id);
-			break;
-		 case RETRO_DEVICE_ID_JOYPAD_R3:
-			if (settings.System == DC_PLATFORM_NAOMI || allow_service_buttons)
-			   setDeviceButtonState(port, RETRO_DEVICE_JOYPAD, id);
-			break;
-		 default:
-			setDeviceButtonState(port, RETRO_DEVICE_JOYPAD, id);
-			break;
-		 }
-	  }
+        for (id = RETRO_DEVICE_ID_JOYPAD_B; id <= RETRO_DEVICE_ID_JOYPAD_R3; ++id)
+        {
+           switch (id)
+           {
+              case RETRO_DEVICE_ID_JOYPAD_L3:
+                 if (allow_service_buttons)
+                    setDeviceButtonStateMacro(ret, port, RETRO_DEVICE_JOYPAD, id);
+                 break;
+              case RETRO_DEVICE_ID_JOYPAD_R3:
+                 if (settings.System == DC_PLATFORM_NAOMI || allow_service_buttons)
+                    setDeviceButtonStateMacro(ret, port, RETRO_DEVICE_JOYPAD, id);
+                 break;
+              default:
+                 setDeviceButtonStateMacro(ret, port, RETRO_DEVICE_JOYPAD, id);
+                 break;
+           }
+        }
+     }
 	  //
 	  // -- analog stick
 
 	  get_analog_stick( input_cb, port, RETRO_DEVICE_INDEX_ANALOG_LEFT, &(joyx[port]), &(joyy[port]) );
 	  get_analog_stick( input_cb, port, RETRO_DEVICE_INDEX_ANALOG_RIGHT, &(joyrx[port]), &(joyry[port]));
-	  lt[port] = get_analog_trigger(input_cb, port, RETRO_DEVICE_ID_JOYPAD_L2) / 128;
-	  rt[port] = get_analog_trigger(input_cb, port, RETRO_DEVICE_ID_JOYPAD_R2) / 128;
+	  lt[port] = get_analog_trigger(ret, input_cb, port, RETRO_DEVICE_ID_JOYPAD_L2) / 128;
+	  rt[port] = get_analog_trigger(ret, input_cb, port, RETRO_DEVICE_ID_JOYPAD_R2) / 128;
 
 	  if (naomi_game_inputs != NULL)
 	  {
@@ -2529,19 +2711,29 @@ void UpdateInputState(u32 port)
 		 rumble.set_rumble_state(port, RETRO_RUMBLE_STRONG, 65535 * vib_strength[port] * rem_time * vib_delta[port]);
 	  }
    }
+   
+   lightgun_params[port].offscreen = true;	   
 
    switch (maple_devices[port])
    {
 	  case MDT_SegaController:
 	  {
 		   int id;
+         int16_t ret = 0;
 		   //
 		   // -- buttons
+         
+         if (libretro_supports_bitmasks)
+            ret = input_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
+         else
+         {
+            for (id = RETRO_DEVICE_ID_JOYPAD_B; id <= RETRO_DEVICE_ID_JOYPAD_R3; ++id)
+               if (input_cb(port, RETRO_DEVICE_JOYPAD, 0, id))
+                  ret |= (1 << id);
+         }
 
 		   for (id = RETRO_DEVICE_ID_JOYPAD_B; id <= RETRO_DEVICE_ID_JOYPAD_X; ++id)
-		   {
-			  setDeviceButtonState(port, RETRO_DEVICE_JOYPAD, id);
-		   }
+			  setDeviceButtonStateMacro(ret, port, RETRO_DEVICE_JOYPAD, id);
 
 		   //
 		   // -- analog stick
@@ -2555,16 +2747,16 @@ void UpdateInputState(u32 port)
 		   if ( digital_triggers )
 		   {
 		      // -- digital left trigger
-		      if ( input_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L) )
+            if (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L))
 		         lt[port]=0xFF;
-		      else if ( input_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2) )
+            else if (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L2))
 		         lt[port]=0x7F;
 		      else
 		         lt[port]=0;
 		      // -- digital right trigger
-		      if ( input_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R) )
+            if (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R))
 		         rt[port]=0xFF;
-		      else if ( input_cb(port, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2) )
+            else if (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R2))
 		         rt[port]=0x7F;
 		      else
 		         rt[port]=0;
@@ -2572,12 +2764,212 @@ void UpdateInputState(u32 port)
 		   else
 		   {
 			   // -- analog triggers
-			   lt[port] = get_analog_trigger( input_cb, port, RETRO_DEVICE_ID_JOYPAD_L2 ) / 128;
-			   rt[port] = get_analog_trigger( input_cb, port, RETRO_DEVICE_ID_JOYPAD_R2 ) / 128;
+			   lt[port] = get_analog_trigger(ret, input_cb, port, RETRO_DEVICE_ID_JOYPAD_L2 ) / 128;
+			   rt[port] = get_analog_trigger(ret, input_cb, port, RETRO_DEVICE_ID_JOYPAD_R2 ) / 128;
 		   }
 	  }
 	  break;
+	  
+	case MDT_AsciiStick:
+	{
+      int16_t ret = 0;
 
+      if (libretro_supports_bitmasks)
+         ret = input_cb(port, RETRO_DEVICE_ASCIISTICK, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
+      else
+      {
+         unsigned id;
+         for (id = RETRO_DEVICE_ID_JOYPAD_B; id <= RETRO_DEVICE_ID_JOYPAD_R3; ++id)
+            if (input_cb(port, RETRO_DEVICE_ASCIISTICK, 0, id))
+               ret |= (1 << id);
+      }
+
+		kcode[port] = 0xFFFF; // active-low
+
+		// stick
+		setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_ASCIISTICK, RETRO_DEVICE_ID_JOYPAD_UP, 4 );
+		setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_ASCIISTICK, RETRO_DEVICE_ID_JOYPAD_DOWN, 5 );
+		setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_ASCIISTICK, RETRO_DEVICE_ID_JOYPAD_LEFT, 6 );
+		setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_ASCIISTICK, RETRO_DEVICE_ID_JOYPAD_RIGHT, 7 );
+		
+		// buttons
+		setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_ASCIISTICK, RETRO_DEVICE_ID_JOYPAD_B,  2 ); // A
+		setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_ASCIISTICK, RETRO_DEVICE_ID_JOYPAD_A,  1 ); // B
+		setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_ASCIISTICK, RETRO_DEVICE_ID_JOYPAD_Y, 10 ); // X
+		setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_ASCIISTICK, RETRO_DEVICE_ID_JOYPAD_X,  9 ); // Y
+		
+		// Z
+		{
+		   uint32_t dc_key = 1 << 8; // Z
+		   bool is_down = (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L )) || 
+		   				   (ret & (1 << RETRO_DEVICE_ID_JOYPAD_L2));
+		   if (is_down)
+			  kcode[port] &= ~dc_key;
+		   else
+			  kcode[port] |= dc_key;
+		}
+
+		// C
+		{
+		   uint32_t dc_key = 1 << 0; // C
+		   bool is_down = (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R)) || 
+		   				   (ret & (1 << RETRO_DEVICE_ID_JOYPAD_R2));
+		   if (is_down)
+			  kcode[port] &= ~dc_key;
+		   else
+			  kcode[port] |= dc_key;
+		}
+		
+		setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_ASCIISTICK, RETRO_DEVICE_ID_JOYPAD_START, 3 ); // Start
+		
+		// unused inputs
+		lt[port]=0;
+		rt[port]=0;
+		joyx[port]=0;
+		joyy[port]=0;
+	}
+	break;
+
+	case MDT_TwinStick:
+	{
+      int16_t ret = 0;
+
+		kcode[port] = 0xFFFF; // active-low
+
+		
+		if ( device_type[port] == RETRO_DEVICE_TWINSTICK_SATURN )
+		{
+			// NOTE: This is a remapping of the RetroPad layout in the block below to make using a real
+			// Saturn Twin-Stick controller (via a USB adapter) less effort.			
+			
+			// The Saturn Twin-Stick identifies as a regular Saturn controller internally but with its controls
+			// wired to the two sticks without much rhyme or reason. The mapping below untangles that layout
+			// into DC compatible inputs, without requiring a change for the Reicast and Beetle Saturn cores.
+
+			// Hope that makes sense!!
+			
+			// NOTE: the dc_bits below are the same, only the retro id values have been rearranged.
+         
+         if (libretro_supports_bitmasks)
+            ret = input_cb(port, RETRO_DEVICE_TWINSTICK_SATURN, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
+         else
+         {
+            unsigned id;
+            for (id = RETRO_DEVICE_ID_JOYPAD_B; id <= RETRO_DEVICE_ID_JOYPAD_R3; ++id)
+               if (input_cb(port, RETRO_DEVICE_TWINSTICK_SATURN, 0, id))
+                  ret |= (1 << id);
+         }
+			
+			// left-stick
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_UP, 4 );
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_DOWN, 5 );
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_LEFT, 6 );
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_RIGHT, 7 );
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_L2, 10 ); // left-trigger
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_R2, 9 ); // left-turbo
+
+			// right-stick
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_X, 12 ); // up
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_L, 15 ); // right
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_A, 13 ); // down
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_Y, 14 ); // left
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_B, 2 ); // right-trigger
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_R, 1 ); // right-turbo
+
+			// misc control
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_START, 3 );
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK_SATURN, RETRO_DEVICE_ID_JOYPAD_SELECT, 11 ); //D
+		}
+		else
+		{	
+			int analog;
+			
+			const int thresh = 11000; // about 33%, allows for 8-way movement
+
+         if (libretro_supports_bitmasks)
+            ret = input_cb(port, RETRO_DEVICE_TWINSTICK, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
+         else
+         {
+            unsigned id;
+            for (id = RETRO_DEVICE_ID_JOYPAD_B; id <= RETRO_DEVICE_ID_JOYPAD_R3; ++id)
+               if (input_cb(port, RETRO_DEVICE_TWINSTICK, 0, id))
+                  ret |= (1 << id);
+         }
+
+			// LX
+			analog = input_cb( port, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X );
+			if ( analog < -thresh )
+				kcode[port] &= ~( 1 << 6 ); // L
+			else if ( analog > thresh )
+				kcode[port] &= ~( 1 << 7 ); // R	
+			else
+			{
+				// digital
+				setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_LEFT, 6 );
+				setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_RIGHT, 7 );
+			}
+			
+			// LY
+			analog = input_cb( port, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y );
+			if ( analog < -thresh )
+				kcode[port] &= ~( 1 << 4 ); // U
+			else if ( analog > thresh )
+				kcode[port] &= ~( 1 << 5 ); // D	
+			else
+			{
+				// digital
+				setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_UP, 4 );
+				setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_DOWN, 5 );
+			}
+
+			// RX
+			analog = input_cb( port, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_X );
+			if ( analog < -thresh )
+				kcode[port] &= ~( 1 << 14 ); // L
+			else if ( analog > thresh )
+				kcode[port] &= ~( 1 << 15 ); // R	
+			else
+			{
+				// digital
+				setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_Y, 14 ); // left
+				setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_A, 15 ); // right
+			}
+			
+			// RY
+			analog = input_cb( port, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT, RETRO_DEVICE_ID_ANALOG_Y );
+			if ( analog < -thresh )
+				kcode[port] &= ~( 1 << 12 ); // U
+			else if ( analog > thresh )
+				kcode[port] &= ~( 1 << 13 ); // D
+			else
+			{
+				// digital
+				setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_X, 12 ); // up
+				setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_B, 13 ); // down
+			}
+
+			// left-stick buttons
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_L2, 10 ); // left-trigger
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_L, 9 ); // left-turbo
+
+			// right-stick buttons
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_R2, 2 ); // right-trigger
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_R, 1 ); // right-turbo
+
+			// misc control
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_START, 3 );
+			setDeviceButtonStateDirectMacro(ret, port, RETRO_DEVICE_TWINSTICK, RETRO_DEVICE_ID_JOYPAD_SELECT, 11 ); //D
+		}
+		
+		// unused inputs
+		lt[port]=0;
+		rt[port]=0;
+		joyx[port]=0;
+		joyy[port]=0;
+	}
+	
+	break;
+	  
 	  case MDT_LightGun:
 	  {
 		 //
@@ -2607,6 +2999,10 @@ void UpdateInputState(u32 port)
 		 {
 			mo_x_abs[port] = (input_cb(port, RETRO_DEVICE_LIGHTGUN, 0, RETRO_DEVICE_ID_LIGHTGUN_SCREEN_X) + 0x8000) * 640.f / 0x10000;
 			mo_y_abs[port] = (input_cb(port, RETRO_DEVICE_LIGHTGUN, 0, RETRO_DEVICE_ID_LIGHTGUN_SCREEN_Y) + 0x8000) * 480.f / 0x10000;
+
+			lightgun_params[port].offscreen = false;
+			lightgun_params[port].x = mo_x_abs[port];
+			lightgun_params[port].y = mo_y_abs[port];
 		 }
 	  }
 	  break;

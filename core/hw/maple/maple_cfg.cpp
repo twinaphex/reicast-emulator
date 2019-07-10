@@ -99,6 +99,37 @@ const rgb_t VMU_SCREEN_COLOR_MAP[VMU_NUM_COLORS] = {
 
 vmu_screen_params_t vmu_screen_params[4] ;
 
+u8 lightgun_img_crosshair[LIGHTGUN_CROSSHAIR_SIZE*LIGHTGUN_CROSSHAIR_SIZE] =
+{
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+	1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,
+	1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,
+	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+	0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+};
+
+u8 lightgun_palette[LIGHTGUN_COLORS_COUNT*3] =
+{
+	0xff,0xff,0xff, // LIGHTGUN_COLOR_OFF
+	0xff,0xff,0xff, // LIGHTGUN_COLOR_WHITE
+	0xff,0x10,0x10, // LIGHTGUN_COLOR_RED
+	0x10,0xff,0x10, // LIGHTGUN_COLOR_GREEN
+	0x10,0x10,0xff, // LIGHTGUN_COLOR_BLUE
+};
+
+lightgun_params_t lightgun_params[4] ;
+
 MapleDeviceType maple_devices[MAPLE_PORTS] =
    { MDT_SegaController, MDT_SegaController, MDT_SegaController, MDT_SegaController };
 bool use_lightgun = false;	// Naomi only
@@ -130,8 +161,6 @@ struct MapleConfigMap : IMapleConfigMap
 	   UpdateInputState(pnum);
 
 	   pjs->kcode=kcode[pnum];
-	   if (settings.System == DC_PLATFORM_DREAMCAST)
-		  pjs->kcode |= 0xF901;
 	   pjs->joy[PJAI_X1]=GetBtFromSgn(joyx[pnum]);
 	   pjs->joy[PJAI_Y1]=GetBtFromSgn(joyy[pnum]);
 	   pjs->joy[PJAI_X2]=GetBtFromSgn(joyrx[pnum]);
@@ -211,6 +240,17 @@ void mcfg_CreateDevices()
 			 else
 				mcfg_Create(MDT_SegaVMU, bus, 0);
 			 break;
+			 
+		case MDT_TwinStick:
+			mcfg_Create(MDT_TwinStick, bus, 5);
+			mcfg_Create(MDT_SegaVMU, bus, 0);
+			break;
+			 
+		case MDT_AsciiStick:
+			mcfg_Create(MDT_AsciiStick, bus, 5);
+			mcfg_Create(MDT_SegaVMU, bus, 0);
+			break;
+		
 		 }
 	  }
    }

@@ -692,6 +692,7 @@ void UpdateFogTexture(u8 *fog_table, GLenum texture_slot, GLint fog_image_format
 }
 
 void DrawVmuTexture(u8 vmu_screen_number, bool draw_additional_primitives);
+void DrawGunCrosshair(u8 port, bool draw_additional_primitives);
 
 void vertex_buffer_unmap(void)
 {
@@ -728,6 +729,7 @@ static void upload_vertex_indices()
 static bool RenderFrame(void)
 {
    int vmu_screen_number = 0 ;
+   int lightgun_port = 0 ;
 
    DoCleanup();
 
@@ -779,6 +781,8 @@ static bool RenderFrame(void)
    {
       scale_x=fb_scale_x;
       scale_y=fb_scale_y;
+		if (SCALER_CTL.interlace == 0 && SCALER_CTL.vscalefactor >= 0x400)
+			scale_y *= SCALER_CTL.vscalefactor / 0x400;
 
       //work out scaling parameters !
       //Pixel doubling is on VO, so it does not affect any pixel operations
@@ -972,6 +976,12 @@ static bool RenderFrame(void)
          float min_y  = pvrrc.fb_Y_CLIP.min / scale_y;
          if (!is_rtt)
          {
+				if (SCALER_CTL.interlace && SCALER_CTL.vscalefactor >= 0x400)
+				{
+					// Clipping is done after scaling/filtering so account for that if enabled
+					height *= SCALER_CTL.vscalefactor / 0x400;
+					min_y *= SCALER_CTL.vscalefactor / 0x400;
+				}
             // Add x offset for aspect ratio > 4/3
             min_x   = min_x * dc2s_scale_h + ds2s_offs_x;
             // Invert y coordinates when rendering to screen
@@ -1020,6 +1030,9 @@ static bool RenderFrame(void)
    for ( vmu_screen_number = 0 ; vmu_screen_number < 4 ; vmu_screen_number++)
       if ( vmu_screen_params[vmu_screen_number].vmu_screen_display )
          DrawVmuTexture(vmu_screen_number, true) ;
+         
+   for ( lightgun_port = 0 ; lightgun_port < 4 ; lightgun_port++)
+         DrawGunCrosshair(lightgun_port, true) ;
 
 	KillTex = false;
    

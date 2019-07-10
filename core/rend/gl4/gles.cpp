@@ -553,6 +553,7 @@ static bool gl_create_resources(void)
 static bool RenderFrame(void)
 {
    int vmu_screen_number = 0 ;
+   int lightgun_port = 0 ;
 
    static int old_screen_width, old_screen_height;
 	if (screen_width != old_screen_width || screen_height != old_screen_height) {
@@ -679,6 +680,8 @@ static bool RenderFrame(void)
    {
       scale_x=fb_scale_x;
       scale_y=fb_scale_y;
+		if (SCALER_CTL.interlace == 0 && SCALER_CTL.vscalefactor >= 0x400)
+			scale_y *= SCALER_CTL.vscalefactor / 0x400;
 
       //work out scaling parameters !
       //Pixel doubling is on VO, so it does not affect any pixel operations
@@ -885,6 +888,12 @@ static bool RenderFrame(void)
          float min_y  = pvrrc.fb_Y_CLIP.min / scale_y;
          if (!is_rtt)
          {
+				if (SCALER_CTL.interlace && SCALER_CTL.vscalefactor >= 0x400)
+				{
+					// Clipping is done after scaling/filtering so account for that if enabled
+					height *= SCALER_CTL.vscalefactor / 0x400;
+					min_y *= SCALER_CTL.vscalefactor / 0x400;
+				}
             // Add x offset for aspect ratio > 4/3
             min_x = min_x * dc2s_scale_h + ds2s_offs_x;
             // Invert y coordinates when rendering to screen
@@ -932,6 +941,9 @@ static bool RenderFrame(void)
    for ( vmu_screen_number = 0 ; vmu_screen_number < 4 ; vmu_screen_number++)
       if ( vmu_screen_params[vmu_screen_number].vmu_screen_display )
          gl4DrawVmuTexture(vmu_screen_number, true) ;
+         
+   for ( lightgun_port = 0 ; lightgun_port < 4 ; lightgun_port++)
+         gl4DrawGunCrosshair(lightgun_port, true) ;
 
 	KillTex = false;
    

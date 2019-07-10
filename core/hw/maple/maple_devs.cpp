@@ -18,7 +18,9 @@
 #endif
 
 const char* maple_sega_controller_name = "Dreamcast Controller";
+const char* maple_sega_twinstick_name = "Twin Stick";
 const char* maple_sega_vmu_name = "Visual Memory";
+const char* maple_ascii_stick_name = "ASCII STICK";
 const char* maple_sega_kbd_name = "Emulated Dreamcast Keyboard";
 const char* maple_sega_mouse_name = "Emulated Dreamcast Mouse";
 const char* maple_sega_dreameye_name_1 = "Dreamcast Camera Flash  Devic";
@@ -28,6 +30,8 @@ const char* maple_sega_purupuru_name = "Puru Puru Pack";
 const char* maple_sega_lightgun_name = "Dreamcast Gun";
 
 const char* maple_sega_brand = "Produced By or Under License From SEGA ENTERPRISES,LTD.";
+
+bool enable_naomi_15khz_dipswitch = false;
 
 enum MapleFunctionID
 {
@@ -249,7 +253,7 @@ struct maple_sega_controller: maple_base
 				{
 					//state data
 					//2 key code
-					w16(pjs.kcode);
+					w16(pjs.kcode | 0xF901); // disable unused bits (active low)
 
 				   //triggers
 				   //1 R
@@ -303,6 +307,160 @@ struct maple_sega_controller: maple_base
 		default:
 			//printf("UNKNOWN MAPLE COMMAND %d\n",cmd);
          return MDRE_UnknownCmd;
+		}
+	}	
+};
+
+
+/*
+	Sega Twin Stick Controller
+	No error checking of any kind, but works just fine
+*/
+struct maple_sega_twinstick: maple_base
+{
+	virtual MapleDeviceType get_device_type()
+	{
+		return MDT_TwinStick;
+	}
+
+	virtual u32 dma( u32 cmd )
+	{
+		//printf("maple_sega_twinstick::dma Called 0x%X;Command %d\n",device_instance->port,Command);
+		switch ( cmd )
+		{
+		
+		case MDC_DeviceRequest:
+			
+			//caps
+			//4
+			w32(MFID_0_Input);
+
+			//struct data
+			//3*4
+			w32( 0xfefe0000 );
+			w32( 0 );
+			w32( 0 );
+
+			//1	area code
+			w8(0xFF);
+
+			//1	direction
+			w8(0);
+			
+			//30
+			wstr(maple_sega_twinstick_name,30);
+
+			//60
+			wstr(maple_sega_brand,60);
+
+			//2
+			w16(0x00DC); 
+
+			//2
+			w16(0x012C);
+
+			return MDRS_DeviceStatus;
+
+		case MDCF_GetCondition:
+			{
+				PlainJoystickState pjs;
+				config->GetInput(&pjs);
+
+				//caps
+				//4
+				w32(MFID_0_Input);
+
+				//state data
+				//2 key code
+				w16(pjs.kcode | 0x0101 ); // or with key bits
+
+				//unused/reserved, 6
+				w16(0);
+				w32(0x80808080);
+			}
+
+			return MDRS_DataTransfer;
+
+		default:
+			//printf("UNKNOWN MAPLE COMMAND %d\n",cmd);
+			return MDRE_UnknownCmd;
+		}
+	}	
+};
+
+
+/*
+	Ascii Stick (Arcade Stick)
+	No error checking of any kind, but works just fine
+*/
+struct maple_ascii_stick: maple_base
+{
+	virtual MapleDeviceType get_device_type()
+	{
+		return MDT_AsciiStick;
+	}
+
+	virtual u32 dma( u32 cmd )
+	{
+		//printf("maple_sega_twinstick::dma Called 0x%X;Command %d\n",device_instance->port,Command);
+		switch ( cmd )
+		{
+		
+		case MDC_DeviceRequest:
+			
+			//caps
+			//4
+			w32(MFID_0_Input);
+
+			//struct data
+			//3*4
+			w32( 0xff070000 );
+			w32( 0 );
+			w32( 0 );
+
+			//1	area code
+			w8(0xFF);
+
+			//1	direction
+			w8(0);
+			
+			//30
+			wstr(maple_ascii_stick_name,30);
+
+			//60
+			wstr(maple_sega_brand,60);
+
+			//2
+			w16(0x010E); 
+
+			//2
+			w16(0x0172);
+
+			return MDRS_DeviceStatus;
+
+		case MDCF_GetCondition:
+			{
+				PlainJoystickState pjs;
+				config->GetInput(&pjs);
+
+				//caps
+				//4
+				w32(MFID_0_Input);
+
+				//state data
+				//2 key code
+				w16(pjs.kcode | 0xF800 ); // or with key bits
+
+				//unused/reserved, 6
+				w16(0);
+				w32(0x80808080);
+			}
+
+			return MDRS_DataTransfer;
+
+		default:
+			//printf("UNKNOWN MAPLE COMMAND %d\n",cmd);
+			return MDRE_UnknownCmd;
 		}
 	}	
 };
@@ -440,9 +598,7 @@ struct maple_sega_vmu: maple_base
 	{
 		memset(flash_data,0,sizeof(flash_data));
 		memset(lcd_data,0,sizeof(lcd_data));
-		wchar tempy[512];
-		sprintf(tempy,"vmu_save_%s.bin",logical_port);
-		string apath=get_writable_data_path(tempy);
+		string apath = get_writable_vmu_path(logical_port);
 
 		vmu_screen_params[bus_id].vmu_lcd_screen = lcd_data_decoded ;
 
@@ -1940,7 +2096,7 @@ struct maple_naomi_jamma : maple_sega_controller
 
 				w8(0x00);
 				w8(0xff);		// in(4)
-				w8(0xff);		// in(5) bit0: 1=VGA, 0=NTSCi
+				w8(enable_naomi_15khz_dipswitch ? 0x00 : 0xff);		// in(5) bit0: 1=VGA, 0=NTSCi
 				w8(0xff);		// in(6)
 
 				w32(0x00);
@@ -2558,6 +2714,14 @@ maple_device* maple_Create(MapleDeviceType type)
 	{
 	case MDT_SegaController:
 		rv=new maple_sega_controller();
+		break;
+
+	case MDT_TwinStick:
+		rv=new maple_sega_twinstick();
+		break;
+
+	case MDT_AsciiStick:
+		rv=new maple_ascii_stick();
 		break;
 
 	case MDT_Microphone:

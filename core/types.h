@@ -573,13 +573,8 @@ struct settings_t
 
 	struct
    {
-      u32 HW_mixing;		//(0) -> SW , 1 -> HW , 2 -> Auto
-      u32 BufferSize;		//In samples ,*4 for bytes (1024)
       u32 LimitFPS;		//0 -> no , (1) -> limit
-      u32 GlobalFocus;	//0 -> only hwnd , (1) -> Global
-      u32 BufferCount;	//BufferCount+2 buffers used , max 60 , default 0
       u32 CDDAMute;
-      u32 GlobalMute;
       u32 DSPEnabled;		//0 -> no, 1 -> yes
       u32 NoBatch;
       u32 NoSound;        //0 ->sound, 1 -> no sound
@@ -976,3 +971,26 @@ struct vmu_screen_params_t {
 extern const rgb_t VMU_SCREEN_COLOR_MAP[VMU_NUM_COLORS] ;
 extern const char* VMU_SCREEN_COLOR_NAMES[VMU_NUM_COLORS] ;
 extern vmu_screen_params_t vmu_screen_params[4] ;
+
+#define LIGHTGUN_CROSSHAIR_SIZE 16
+
+enum LIGHTGUN_COLORS {
+	LIGHTGUN_COLOR_OFF,
+	LIGHTGUN_COLOR_WHITE,
+	LIGHTGUN_COLOR_RED,
+	LIGHTGUN_COLOR_GREEN,
+	LIGHTGUN_COLOR_BLUE,
+	LIGHTGUN_COLORS_COUNT
+};
+
+struct lightgun_params_t {
+	bool offscreen;
+	float x;
+	float y;
+	bool dirty;
+	int colour;
+};
+
+extern u8 lightgun_palette[LIGHTGUN_COLORS_COUNT*3];
+extern u8 lightgun_img_crosshair[LIGHTGUN_CROSSHAIR_SIZE*LIGHTGUN_CROSSHAIR_SIZE];
+extern lightgun_params_t lightgun_params[4] ;
