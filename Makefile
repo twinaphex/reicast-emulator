@@ -32,13 +32,13 @@ else
 endif
 CC_AS    = ${CC_PREFIX}as
 
-MFLAGS   := 
-ASFLAGS  := 
+MFLAGS   :=
+ASFLAGS  :=
 LDFLAGS  :=
 LDFLAGS_END :=
 INCFLAGS :=
 LIBS     :=
-CFLAGS   := 
+CFLAGS   :=
 CXXFLAGS :=
 
 GIT_VERSION := " $(shell git rev-parse --short HEAD || echo unknown)"
@@ -73,6 +73,10 @@ ifeq ($(platform),)
 		platform = osx
 	else ifneq ($(findstring win,$(UNAME)),)
 		platform = win
+	else ifneq (,$(findstring armv,$(platform)))
+		ifeq (,$(findstring classic_,$(platform)))
+		override platform += unix
+		endif
 	endif
 endif
 
@@ -238,29 +242,20 @@ else ifeq ($(platform), classic_armv8_a35)
 	SINGLE_PREC_FLAGS = 1
 	HAVE_LTCG = 0
 	HAVE_OPENMP = 0
-	CFLAGS += -Ofast \
-	-flto=4 -fwhole-program -fuse-linker-plugin \
+	CFLAGS += -Ofast -flto=4 -fwhole-program -fuse-linker-plugin \
 	-fdata-sections -ffunction-sections -Wl,--gc-sections \
 	-fno-stack-protector -fno-ident -fomit-frame-pointer \
 	-falign-functions=1 -falign-jumps=1 -falign-loops=1 \
 	-fno-unwind-tables -fno-asynchronous-unwind-tables -fno-unroll-loops \
 	-fmerge-all-constants -fno-math-errno \
-	-marm -mtune=cortex-a35 -mfpu=neon-fp-armv8 -mfloat-abi=hard
+	-marm -mtune=cortex-a35 -march=armv8-a -mfpu=neon-fp-armv8 -mfloat-abi=hard -DPSC
 	CXXFLAGS += $(CFLAGS)
-	ASFLAGS += $(CFLAGS)
+        ASFLAGS += $(CFLAGS) -c -frename-registers -fno-strict-aliasing -ffast-math -ftree-vectorize
 	LDFLAGS += -marm -mtune=cortex-a35 -mfpu=neon-fp-armv8 -mfloat-abi=hard
 	FORCE_GLES=1
-	ifeq ($(shell echo `$(CC) -dumpversion` "< 4.9" | bc -l), 1)
-		CFLAGS += -march=armv8-a
-		LDFLAGS += -march=armv8-a
-	else
-		CFLAGS += -march=armv8-a
-		LDFLAGS += -march=armv8-a
-		# If gcc is 5.0 or later
-		ifeq ($(shell echo `$(CC) -dumpversion` ">= 5" | bc -l), 1)
-			LDFLAGS += -static-libgcc -static-libstdc++
-		endif
-	endif
+	LDFLAGS += -march=armv8-a -static-libgcc -static-libstdc++
+	CPUFLAGS += -DNO_ASM -DARM -D__arm__ -DARM_ASM -DNOSSE
+	PLATCFLAGS = -DARM
 	PLATFORM_EXT := unix
 	WITH_DYNAREC = arm
 	HAVE_GENERIC_JIT = 0

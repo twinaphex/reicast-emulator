@@ -122,7 +122,11 @@ struct gl_cached_state
    struct
    {
       bool used;
-      GLdouble depth;
+      #if(PSC) 
+	GLfloat depth;
+      #else
+	GLdouble depth;
+      #endif
    } cleardepth;
 
    struct
@@ -135,8 +139,13 @@ struct gl_cached_state
    struct
    {
       bool used;
-      GLclampd zNear;
-      GLclampd zFar;
+      #if(PSC)
+        GLclampd zNear;
+        GLclampd zFar;
+      #else
+        GLclampf zNear;
+        GLclampf zFar;
+      #endif
    } depthrange;
 
    struct
@@ -407,7 +416,11 @@ void rglReadBuffer(GLenum mode)
  * Core in:
  * OpenGLES  : 2.0
  */
+#if(PSC)
+void rglClearDepth(GLfloat depth)
+#else
 void rglClearDepth(GLdouble depth)
+#endif
 {
 #ifdef GLSM_DEBUG
    log_cb(RETRO_LOG_INFO, "glClearDepth.\n");
@@ -442,7 +455,11 @@ void rglPixelStorei(GLenum pname, GLint param)
  * Core in:
  * OpenGLES  : 2.0
  */
+#if(PSC)
+void rglDepthRange(GLclampf zNear, GLclampf zFar)
+#else
 void rglDepthRange(GLclampd zNear, GLclampd zFar)
+#endif
 {
 #ifdef GLSM_DEBUG
    log_cb(RETRO_LOG_INFO, "glDepthRange.\n");
