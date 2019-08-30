@@ -716,6 +716,531 @@ struct retro_core_option_definition option_defs_us[] = {
 
 /* RETRO_LANGUAGE_TURKISH */
 
+struct retro_core_option_definition option_defs_tr[] = {
+#if ((FEAT_SHREC == DYNAREC_JIT && HOST_CPU == CPU_X86) || (HOST_CPU == CPU_ARM) || (HOST_CPU == CPU_ARM64) || (HOST_CPU == CPU_X64)) && defined(TARGET_NO_JIT)
+   {
+      CORE_OPTION_NAME "_cpu_mode",
+      "CPU Modu (Yeniden Başlatma Gerektirir)",
+      "",
+      {
+#if (FEAT_SHREC == DYNAREC_JIT && HOST_CPU == CPU_X86) || (HOST_CPU == CPU_ARM) || (HOST_CPU == CPU_ARM64) || (HOST_CPU == CPU_X64)
+         { "dynamic_recompiler", "Dynamic Recompiler" },
+#endif
+#ifdef TARGET_NO_JIT
+         { "generic_recompiler", "Generic Recompiler" },
+#endif
+         { NULL, NULL },
+      },
+#if (FEAT_SHREC == DYNAREC_JIT && HOST_CPU == CPU_X86) || (HOST_CPU == CPU_ARM) || (HOST_CPU == CPU_ARM64) || (HOST_CPU == CPU_X64)
+      "dynamic_recompiler",
+#elif defined(TARGET_NO_JIT)
+      "generic_recompiler",
+#endif
+   },
+#endif
+   {
+      CORE_OPTION_NAME "_boot_to_bios",
+      "BIOS'a önyükleme (Yeniden Başlatma Gerektirir)",
+      "Doğrudan Dreamcast BIOS menüsüne önyükleme yapın.",
+      {
+         { "disabled", NULL },
+         { "enabled",  NULL },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+   {
+      CORE_OPTION_NAME "_system",
+      "Sistem Tipi (Yeniden Başlatma Gerektirir)",
+      "",
+      {
+         { "auto",       "Otomatik" },
+         { "dreamcast",  "Dreamcast" },
+         { "naomi",      "NAOMI" },
+         { "atomiswave", "Atomiswave" },
+         { NULL, NULL },
+      },
+      "auto",
+   },
+   {
+      CORE_OPTION_NAME "_hle_bios",
+      "HLE BIOS",
+      "Üst düzey öykünmüş BIOS kullanımını zorla.",
+      {
+         { "disabled",  NULL },
+         { "enabled",  NULL },
+         { NULL, NULL},
+      },
+      "disabled",
+   },
+#ifdef HAVE_OIT
+   {
+      CORE_OPTION_NAME "_oit_abuffer_size",
+      "Birikim Piksel Arabellek Boyutu (Yeniden Başlatma Gerektirir)",
+      "",
+      {
+         { "512MB", NULL },
+         { "1GB",   NULL },
+         { "2GB",   NULL },
+         { NULL, NULL },
+      },
+      "512MB",
+   },
+#endif
+   {
+      CORE_OPTION_NAME "_internal_resolution",
+      "Dahili Çözünürlük (Yeniden Başlat Gerektirir)",
+      "Render çözünürlüğünü değiştirin. Yeniden başlatma gerektirir.",
+      {
+         { "320x240",    NULL },
+         { "640x480",    NULL },
+         { "800x600",    NULL },
+         { "960x720",    NULL },
+         { "1024x768",   NULL },
+         { "1280x720",   NULL },
+         { "1280x960",   NULL },
+         { "1280x1024",  NULL },
+         { "1440x1080",  NULL },
+         { "1600x900",   NULL },
+         { "1600x1200",  NULL },
+         { "1920x1080",  NULL },
+         { "1920x1440",  NULL },
+         { "2560x1440",  NULL },
+         { "2560x1920",  NULL },
+         { "2880x2160",  NULL },
+         { "3200x2400",  NULL },
+         { "3440x1400",  NULL },
+         { "3840x2160",  NULL },
+         { "3840x2880",  NULL },
+         { "4096x2160",  NULL },
+         { "4480x3360",  NULL },
+         { "5120x3840",  NULL },
+         { "5760x4320",  NULL },
+         { "6400x4800",  NULL },
+         { "7040x5280",  NULL },
+         { "7680x5760",  NULL },
+         { "8320x6240",  NULL },
+         { "8960x6720",  NULL },
+         { "9600x7200",  NULL },
+         { "10240x7680", NULL },
+         { "10880x8160", NULL },
+         { "11520x8640", NULL },
+         { "12160x9120", NULL },
+         { "12800x9600", NULL },
+         { NULL, NULL },
+      },
+#ifdef LOW_RES
+      "320x240",
+#else
+      "640x480",
+#endif
+   },
+   {
+      CORE_OPTION_NAME "_screen_rotation",
+      "Ekran Yönü",
+      "",
+      {
+         { "horizontal", "Yatay" },
+         { "vertical",   "Dikey" },
+         { NULL, NULL },
+      },
+      "horizontal",
+   },
+   {
+      CORE_OPTION_NAME "_alpha_sorting",
+      "Alfa Sıralama",
+      "",
+      {
+         { "per-strip (fast, least accurate)", "Şerit Başına (hızlı, en az doğru)" },
+         { "per-triangle (normal)",            "Üçgen Başına (normal)" },
+#ifdef HAVE_OIT
+         { "per-pixel (accurate)",             "Piksel Başına (doğru, ancak en yavaş)" },
+#endif
+         { NULL, NULL },
+      },
+#if defined(LOW_END)
+      "per-strip (fast, least accurate)",
+#else
+      "per-triangle (normal)",
+#endif
+   },
+   {
+      CORE_OPTION_NAME "_gdrom_fast_loading",
+      "GDROM Hızlı Yükleme (kusurlu)",
+      "GD-ROM yüklemesini hızlandırır. NOT: Bu seçenek şimdilik HLE BIOS ile çalışmıyor.",
+      {
+         { "disabled", NULL },
+         { "enabled",  NULL },
+         { NULL, NULL },
+      },
+#ifdef LOW_END
+      "enabled",
+#else
+      "disabled",
+#endif
+   },
+   {
+      CORE_OPTION_NAME "_mipmapping",
+      "Mipmapping",
+      "",
+      {
+         { "enabled",  NULL },
+         { "disabled", NULL },
+         { NULL, NULL },
+      },
+      "enabled",
+   },
+   {
+      CORE_OPTION_NAME "_volume_modifier_enable",
+      "Hacim Değiştirici",
+      "Nesne gölgeleri çizmek için genellikle oyunlar tarafından kullanılan bir Dreamcast GPU özelliği. Bu normalde etkinleştirilmelidir - performansın etkisi ihmal edilebilir düzeyde genellikle minimum düzeydedir.",
+      {
+         { "enabled",  NULL },
+         { "disabled", NULL },
+         { NULL, NULL },
+      },
+      "enabled",
+   },
+   {
+      CORE_OPTION_NAME "_widescreen_hack",
+      "Geniş ekran kesmesi (Yeniden Başlatma Gerektirir)",
+      "",
+      {
+         { "disabled", NULL },
+         { "enabled",  NULL },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+   {
+      CORE_OPTION_NAME "_cable_type",
+      "Kablo Tipi",
+      "",
+      {
+         { "TV (RGB)",       NULL },
+         { "TV (Composite)", NULL },
+         { "VGA (RGB)",      NULL },
+         { NULL, NULL },
+      },
+#ifdef LOW_END
+      "VGA (RGB)",
+#else
+      "TV (RGB)",
+#endif
+   },
+   {
+      CORE_OPTION_NAME "_broadcast",
+      "Yayın",
+      "",
+      {
+         { "Default", NULL },
+         { "PAL_M",   "PAL-M (Brazil)" },
+         { "PAL_N",   "PAL-N (Argentina, Paraguay, Uruguay)" },
+         { "NTSC",    NULL },
+         { "PAL",     "PAL (World)" },
+         { NULL, NULL },
+      },
+      "Default",
+   },
+   {
+      CORE_OPTION_NAME "_framerate",
+      "Kare Hızı",
+      "Emülatörün ön uçla nasıl etkileşimde bulunduğunu etkiler. 'Tam Hız' - emülatör, bir kare oluşturulduğunda, kontrolü RetroArch'a geri döndürür. 'Normal' - emülatör, V-blank kesmesi her üretildiğinde kontrolü RetroArch'a döndürür. Çoğu durumda 'Tam Hız' kullanılmalıdır. 'Normal' bazı sistemlerde kare ilerleme hızını iyileştirebilir, ancak ekran statik olduğunda (örneğin, yükleme/duraklatma ekranları) yanıt vermeyen girişe neden olabilir.",
+      {
+         { "fullspeed", "Tam Hız" },
+         { "normal",    "Normal" },
+         { NULL, NULL },
+      },
+      "fullspeed",
+   },
+   {
+      CORE_OPTION_NAME "_region",
+      "Bölge",
+      "",
+      {
+         { "Default", "Varsayılan" },
+         { "Japan",   NULL },
+         { "USA",     NULL },
+         { "Europe",  NULL },
+         { NULL, NULL },
+      },
+      "Default",
+   },
+   {
+      CORE_OPTION_NAME "_language",
+      "Dil",
+      "",
+      {
+         { "Default",  "Varsayılan" },
+         { "Japanese", NULL },
+         { "English",  NULL },
+         { "German",   NULL },
+         { "French",   NULL },
+         { "Spanish",  NULL },
+         { "Italian",  NULL },
+         { NULL, NULL },
+      },
+      "Default",
+   },
+   {
+      CORE_OPTION_NAME "_div_matching",
+      "DIV Eşleştirme (performans, daha az doğru)",
+      "",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { "auto",     "Otomatik" },
+         { NULL, NULL },
+      },
+#ifdef LOW_END
+      "enabled",
+#else
+      "disabled",
+#endif
+   },
+   {
+      CORE_OPTION_NAME "_analog_stick_deadzone",
+      "Analog Çubuğu Ölü Bölge",
+      "",
+      {
+         { "0%",  NULL },
+         { "5%",  NULL },
+         { "10%", NULL },
+         { "15%", NULL },
+         { "20%", NULL },
+         { "25%", NULL },
+         { "30%", NULL },
+         { NULL, NULL },
+      },
+      "15%",
+   },
+   {
+      CORE_OPTION_NAME "_trigger_deadzone",
+      "Tetik Ölü Bölge",
+      "",
+      {
+         { "0%",  NULL },
+         { "5%",  NULL },
+         { "10%", NULL },
+         { "15%", NULL },
+         { "20%", NULL },
+         { "25%", NULL },
+         { "30%", NULL },
+         { NULL, NULL },
+      },
+      "0%",
+   },
+   {
+      CORE_OPTION_NAME "_digital_triggers",
+      "Dijital Tetikleyiciler",
+      "",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+   {
+      CORE_OPTION_NAME "_enable_dsp",
+      "DSP'yi Etkinleştir",
+      "Dreamcast'in ses DSP'sinin (dijital sinyal işlemcisi) öykünmesini etkinleştirin. Üretilen sesin doğruluğunu arttırır, ancak performans gereksinimlerini artırır.",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { NULL, NULL },
+      },
+#ifdef LOW_END
+      "disabled",
+#else
+      "enabled",
+#endif
+   },
+#ifdef HAVE_TEXUPSCALE
+   {
+      CORE_OPTION_NAME "_texupscale",
+      "Doku Büyütme (xBRZ)",
+      "",
+      {
+         { "off", "Devre Dışı" },
+         { "2x",  NULL },
+         { "4x",  NULL },
+         { "6x",  NULL },
+         { NULL, NULL },
+      },
+      "off",
+   },
+   {
+      CORE_OPTION_NAME "_texupscale_max_filtered_texture_size",
+      "Doku Yükseltme Maks. Filtre boyutu",
+      "",
+      {
+         { "256",  NULL },
+         { "512",  NULL },
+         { "1024", NULL },
+         { NULL, NULL },
+      },
+      "256",
+   },
+#endif
+   {
+      CORE_OPTION_NAME "_enable_rtt",
+      "RTT'yi etkinleştir (Dokuya Render'i)",
+      "",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { NULL, NULL },
+      },
+      "enabled",
+   },
+   {
+      CORE_OPTION_NAME "_enable_rttb",
+      "RTT'yi etkinleştirme (Dokuya Render'i) ara belleği",
+      "",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+   {
+      CORE_OPTION_NAME "_render_to_texture_upscaling",
+      "Doku Yükseltme İşlemine Render",
+      "",
+      {
+         { "1x", NULL },
+         { "2x", NULL },
+         { "3x", NULL },
+         { "4x", NULL },
+         { "8x", NULL },
+         { NULL, NULL },
+      },
+      "1x",
+   },
+#if !defined(TARGET_NO_THREADS)
+   {
+      CORE_OPTION_NAME "_threaded_rendering",
+      "İşlem Parçacığı Renderlama (Yeniden Başlatma Gerektirir)",
+      "",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { NULL, NULL },
+      },
+#if defined(ANDROID) || defined(IOS) || defined(THREADED_RENDERING_DEFAULT)
+      "enabled",
+#else
+      "disabled",
+#endif
+   },
+   {
+      CORE_OPTION_NAME "_synchronous_rendering",
+      "Senkronize İşleme",
+      "",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+#endif
+   {
+      CORE_OPTION_NAME "_frame_skipping",
+      "Kare Atlama",
+      "",
+      {
+         { "disabled",  "Devre Dışı" },
+         { "1",         NULL },
+         { "2",         NULL },
+         { "3",         NULL },
+         { "4",         NULL },
+         { "5",         NULL },
+         { "6",         NULL },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+   {
+      CORE_OPTION_NAME "_enable_purupuru",
+      "Purupuru Paketi / Titreşim Paketi",
+      "Denetleyici geri bildirimini etkinleştirir.",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { NULL, NULL },
+      },
+      "enabled",
+   },
+   {
+      CORE_OPTION_NAME "_allow_service_buttons",
+      "Allow NAOMI Service Buttons",
+      "Kabin ayarlarına girmek için NAOMI'nin SERVİS düğmesini etkinleştirir.",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+   {
+      CORE_OPTION_NAME "_enable_naomi_15khz_dipswitch",
+      "NAOMI 15KHz Dipswitch'i etkinleştir",
+      "Bu, 240p, 480i'de gösterimi zorlayabilir veya oyuna bağlı olarak hiçbir etkisi olmayabilir.",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+   {
+      CORE_OPTION_NAME "_custom_textures",
+      "Özel Dokular Yükle",
+      "",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+   {
+      CORE_OPTION_NAME "_dump_textures",
+      "Dokuları Göm",
+      "",
+      {
+         { "disabled", "Devre Dışı" },
+         { "enabled",  "Etkin" },
+         { NULL, NULL },
+      },
+      "disabled",
+   },
+   {
+      CORE_OPTION_NAME "_per_content_vmus",
+      "Oyun Başına VMU'lar",
+      "Devre dışı bırakıldığında, tüm oyunlar RetroArch'ın sistem dizininde bulunan 4 VMU kaydetme dosyasını (A1, B1, C1, D1) paylaşır. 'VMU A1' ayarı, RetroArch'ın başlattığı her oyun için kaydetme dizininde benzersiz bir VMU 'A1' dosyası oluşturur. 'Tüm VMU'lar' ayarı, başlatılan her oyun için 4 benzersiz VMU dosyası (A1, B1, C1, D1) oluşturur.",
+      {
+         { "disabled", "Devre Dışı" },
+         { "VMU A1",   NULL },
+         { "All VMUs", "Tüm VMU'lar" },
+         { NULL, NULL},
+      },
+      "disabled",
+   },
+   VMU_SCREEN_PARAMS(1)
+   VMU_SCREEN_PARAMS(2)
+   VMU_SCREEN_PARAMS(3)
+   VMU_SCREEN_PARAMS(4)
+   LIGHTGUN_PARAMS(1)
+   LIGHTGUN_PARAMS(2)
+   LIGHTGUN_PARAMS(3)
+   LIGHTGUN_PARAMS(4)
+   { NULL, NULL, NULL, {{0}}, NULL },
+};
+
 /*
  ********************************
  * Language Mapping
@@ -741,7 +1266,7 @@ struct retro_core_option_definition *option_defs_intl[RETRO_LANGUAGE_LAST] = {
    NULL,           /* RETRO_LANGUAGE_VIETNAMESE */
    NULL,           /* RETRO_LANGUAGE_ARABIC */
    NULL,           /* RETRO_LANGUAGE_GREEK */
-   NULL,           /* RETRO_LANGUAGE_TURKISH */
+   option_defs_tr, /* RETRO_LANGUAGE_TURKISH */
 };
 
 /*
