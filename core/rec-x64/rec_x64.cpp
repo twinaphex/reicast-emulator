@@ -290,9 +290,8 @@ public:
 	void compile(RuntimeBlockInfo* block, bool force_checks, bool reset, bool staging, bool optimise)
    {
 		current_opid = -1;
-      if (force_checks) {
-			CheckBlock(block);
-		}
+
+		CheckBlock(force_checks, block);
 
 #ifdef _WIN32
 		sub(rsp, 0x28);		// 32-byte shadow space + 8 byte alignment
@@ -1813,7 +1812,7 @@ private:
 		return true;
 	}
 
-	void CheckBlock(RuntimeBlockInfo* block) {
+	void CheckBlock(bool force_checks, RuntimeBlockInfo* block) {
 	   mov(call_regs[0], block->addr);
 
 		// FIXME This test shouldn't be necessary
@@ -1826,6 +1825,9 @@ private:
 			cmp(dword[rax], block->vaddr);
 			jne(reinterpret_cast<const void*>(&ngen_blockcheckfail));
 		}
+
+		if (!force_checks)
+			return;
 
 	   s32 sz=block->sh4_code_size;
 	   u32 sa=block->addr;

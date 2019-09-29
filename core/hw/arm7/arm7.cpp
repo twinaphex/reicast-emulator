@@ -676,7 +676,7 @@ u32 DYNACALL DoMemOp(u32 addr,u32 data)
 }
 
 //findfirstset -- used in LDM/STM handling
-#if HOST_CPU==CPU_X86 && BUILD_COMPILER != COMPILER_GCC
+#if HOST_CPU==CPU_X86 && !defined(__GNUC__)
 #include <intrin.h>
 
 u32 findfirstset(u32 v)
@@ -1227,8 +1227,7 @@ void *armGetEmitPtr()
 	return NULL;
 }
 
-
-#if (HOST_CPU == CPU_X86) && FEAT_AREC != DYNAREC_NONE
+#if HOST_CPU == CPU_X86
 
 /* X86 backend
  * Uses a mix of
