@@ -113,6 +113,7 @@ HOST_CPU_ARM=0x20000002
 HOST_CPU_MIPS=0x20000003
 HOST_CPU_X64=0x20000004
 HOST_CPU_ARM64=0x20000006
+DYNAREC_NONE=0x40000001
 
 ifeq ($(STATIC_LINKING),1)
 	EXT=a
@@ -615,10 +616,20 @@ else ifneq (,$(findstring ios,$(platform)))
 
 	fpic = -fPIC
 	GL_LIB := -framework OpenGLES
-
-	CC = clang -arch armv7 -isysroot $(IOSSDK)
+	ifeq ($(platform), ios-arm64)
+		CC = clang -arch arm64 -isysroot $(IOSSDK)
+		CXX = clang++ -arch arm64 -isysroot $(IOSSDK)
+		CXXFLAGS += -DIOS -DHAVE_OPENGLES3 -DFEAT_AREC=DYNAREC_NONE -DFEAT_DSPREC=DYNAREC_NONE -DFEAT_SHREC=DYNAREC_NONE
+		CFLAGS += -Wno-error=implicit-function-declaration -DIOS -DHAVE_OPENGLES3
+		HAVE_GENERIC_JIT := 0
+		WITH_DYNAREC = DYNAREC_NONE
+		HOST_CPU_FLAGS = -DHOST_CPU=$(DYNAREC_NONE)
+		FORCE_GLES = 1
+	else
+		CC = clang -arch armv7 -isysroot $(IOSSDK)
+		CXX = clang++ -arch armv7 -isysroot $(IOSSDK)
+	endif
 	CC_AS = perl ./tools/gas-preprocessor.pl $(CC)
-	CXX = clang++ -arch armv7 -isysroot $(IOSSDK)
 	ifeq ($(platform),ios9)
 		CC         += -miphoneos-version-min=8.0
 		CC_AS      += -miphoneos-version-min=8.0
@@ -795,9 +806,11 @@ ifeq ($(ARM_FLOAT_ABI_HARD),1)
 	CFLAGS += -DARM_HARDFP
 endif
 
-ifeq ($(WITH_DYNAREC), $(filter $(WITH_DYNAREC), x86_64 x64))
-	HOST_CPU_FLAGS = -DHOST_CPU=$(HOST_CPU_X64)
-	HAVE_LTCG = 0
+ifneq ($(platform),ios-arm64)
+	ifeq ($(WITH_DYNAREC), $(filter $(WITH_DYNAREC), x86_64 x64))
+		HOST_CPU_FLAGS = -DHOST_CPU=$(HOST_CPU_X64)
+		HAVE_LTCG = 0
+	endif
 endif
 
 ifeq ($(WITH_DYNAREC), x86)
@@ -814,7 +827,9 @@ endif
 
 ifeq ($(FORCE_GLES),1)
 	GLES = 1
-	GL_LIB := -lGLESv2
+	ifneq ($(platform),ios-arm64)
+		GL_LIB := -lGLESv2
+	endif
 else ifneq (,$(findstring gles,$(platform)))
 	GLES = 1
 	GL_LIB := -lGLESv2

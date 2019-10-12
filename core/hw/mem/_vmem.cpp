@@ -467,9 +467,9 @@ void _vmem_bm_reset(void)
 	// If we allocated it via vmem:
 	if (virt_ram_base)
 		vmem_platform_reset_mem(p_sh4rcb->fpcb, sizeof(p_sh4rcb->fpcb));
-	else
+	//else
 		// We allocated it via a regular malloc/new/whatever on the heap
-		bm_vmem_pagefill((void**)p_sh4rcb->fpcb, sizeof(p_sh4rcb->fpcb));
+	//	bm_vmem_pagefill((void**)p_sh4rcb->fpcb, sizeof(p_sh4rcb->fpcb));
 }
 
 // This gets called whenever there is a pagefault, it is possible that it lands
@@ -487,7 +487,7 @@ bool BM_LockedWrite(u8* address) {
 		// Alloc the page then and initialize it to default values
 		void *aligned_addr = (void*)(ptrint & (~PAGE_MASK));
 		vmem_platform_ondemand_page(aligned_addr, PAGE_SIZE);
-		bm_vmem_pagefill((void**)aligned_addr, PAGE_SIZE);
+		//bm_vmem_pagefill((void**)aligned_addr, PAGE_SIZE);
 		return true;
 	}
 	return false;
@@ -532,7 +532,7 @@ bool _vmem_reserve(void)
 
 		// Allocate it all and initialize it.
 		p_sh4rcb = (Sh4RCB*)malloc_pages(sizeof(Sh4RCB));
-		bm_vmem_pagefill((void**)p_sh4rcb->fpcb, sizeof(p_sh4rcb->fpcb));
+		//bm_vmem_pagefill((void**)p_sh4rcb->fpcb, sizeof(p_sh4rcb->fpcb));
 
 		mem_b.size = RAM_SIZE;
 		mem_b.data = (u8*)malloc_pages(RAM_SIZE);

@@ -255,7 +255,7 @@ static void context_segfault(rei_host_context_t* reictx, void* segfault_ctx, boo
 #elif HOST_CPU == CPU_GENERIC
    //nothing!
 #else
-#error Unsupported HOST_CPU
+//#error Unsupported HOST_CPU
 #endif
 #endif
 }
@@ -328,8 +328,8 @@ static void signal_handler(int sn, siginfo_t * si, void *segfault_ctx)
 	if (vmem32_handle_signal(si->si_addr, write, exception_pc))
 		return;
 #endif
-	if (bm_RamWriteAccess(si->si_addr))
-		return;
+	//if (bm_RamWriteAccess(si->si_addr))
+	//	return;
 	if (VramLockedWrite((u8*)si->si_addr))
       return;
 #if !defined(TARGET_NO_NVMEM) && FEAT_SHREC != DYNAREC_NONE

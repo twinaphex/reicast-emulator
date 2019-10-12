@@ -1127,7 +1127,7 @@ bool dc_serialize(void **data, unsigned int *total_size)
 	LIBRETRO_S(reg_dimm_status);
 	LIBRETRO_S(NaomiDataRead);
 
-	LIBRETRO_S(cycle_counter);
+	//LIBRETRO_S(cycle_counter);
 	LIBRETRO_S(i);	// idxnxx
 
 #if FEAT_SHREC != DYNAREC_NONE
@@ -1628,7 +1628,7 @@ bool dc_unserialize(void **data, unsigned int *total_size, size_t actual_data_si
 	   LIBRETRO_US(dummy_int);		// NAOMI_COMM_DATA
 	}
 
-	LIBRETRO_US(cycle_counter);
+	//LIBRETRO_US(cycle_counter);
 	LIBRETRO_US(dummy_int);	// idxnxx
 
 #if FEAT_SHREC != DYNAREC_NONE
