@@ -201,7 +201,6 @@ struct rei_host_context_t
 #endif
 };
 
-
 #define MCTX(p) (((ucontext_t *)(segfault_ctx))->uc_mcontext p)
 
 template <typename Ta, typename Tb>
@@ -230,8 +229,13 @@ static void context_segfault(rei_host_context_t* reictx, void* segfault_ctx, boo
       bicopy(reictx->r[i], MCTX(->__ss.__r[i]), to_segfault);
 #endif
 #elif HOST_CPU == CPU_ARM64
-	bicopy(reictx->pc, MCTX(.pc), to_segfault);
-	bicopy(reictx->x2, MCTX(.regs[2]), to_segfault);
+	#ifdef IOS
+		bicopy(reictx->pc, MCTX(->__ss.__pc), to_segfault);
+		bicopy(reictx->x2, MCTX(->__ss.__x[2]), to_segfault);
+	#else
+		bicopy(reictx->pc, MCTX.pc, to_segfault);
+		bicopy(reictx->x2, MCTX(.regs[2]), to_segfault);
+	#endif
 #elif HOST_CPU == CPU_X86
 #ifdef __linux__
    bicopy(reictx->pc, MCTX(.gregs[REG_EIP]), to_segfault);
