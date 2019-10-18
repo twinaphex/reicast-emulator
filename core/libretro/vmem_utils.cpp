@@ -139,7 +139,7 @@ static int allocate_shared_filemem(unsigned size) {
 // Implement vmem initialization for RAM, ARAM, VRAM and SH4 context, fpcb etc.
 // The function supports allocating 512MB or 4GB addr spaces.
 
-int vmem_fd = -1;
+int vmem_fda = -1;
 static int shmem_fd2 = -1;
 
 // vmem_base_addr points to an address space of 512MB (or 4GB) that can be used for fast memory ops.
@@ -148,8 +148,8 @@ static int shmem_fd2 = -1;
 // memory using a fallback (that is, regular mallocs and falling back to slow memory JIT).
 VMemType vmem_platform_init(void **vmem_base_addr, void **sh4rcb_addr) {
 	// Firt let's try to allocate the shm-backed memory
-	vmem_fd = allocate_shared_filemem(RAM_SIZE_MAX + VRAM_SIZE_MAX + ARAM_SIZE_MAX);
-	if (vmem_fd < 0)
+	vmem_fda = allocate_shared_filemem(RAM_SIZE_MAX + VRAM_SIZE_MAX + ARAM_SIZE_MAX);
+	if (vmem_fda < 0)
 		return MemTypeError;
 
 	// Now try to allocate a contiguous piece of memory.
@@ -165,7 +165,7 @@ VMemType vmem_platform_init(void **vmem_base_addr, void **sh4rcb_addr) {
 		unsigned memsize = 512*1024*1024 + sizeof(Sh4RCB) + ARAM_SIZE_MAX + 0x10000;
 		first_ptr = mem_region_reserve(NULL, memsize);
 		if (!first_ptr) {
-			close(vmem_fd);
+			close(vmem_fda);
 			return MemTypeError;
 		}
 		rv = MemType512MB;
@@ -231,7 +231,7 @@ void vmem_platform_create_mappings(const vmem_mapping *vmem_maps, unsigned numma
 		for (unsigned j = 0; j < num_mirrors; j++) {
 			u64 offset = vmem_maps[i].start_address + j * vmem_maps[i].memsize;
 			verify(mem_region_unmap_file(&virt_ram_base[offset], vmem_maps[i].memsize));
-			verify(mem_region_map_file((void*)(uintptr_t)vmem_fd, &virt_ram_base[offset],
+			verify(mem_region_map_file((void*)(uintptr_t)vmem_fda, &virt_ram_base[offset],
 					vmem_maps[i].memsize, vmem_maps[i].memoffset, vmem_maps[i].allow_writes) != NULL);
 		}
 	}
