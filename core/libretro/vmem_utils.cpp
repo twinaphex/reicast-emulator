@@ -47,7 +47,9 @@ bool mem_region_lock(void *start, size_t len)
 {
 	size_t inpage = (uintptr_t)start & PAGE_MASK;
 	if (mprotect((u8*)start - inpage, len + inpage, PROT_READ))
-		die("mprotect failed...");
+		#ifndef IOS
+			die("mprotect failed...");
+		#endif
 	return true;
 }
 
@@ -56,7 +58,9 @@ bool mem_region_unlock(void *start, size_t len)
 	size_t inpage = (uintptr_t)start & PAGE_MASK;
 	if (mprotect((u8*)start - inpage, len + inpage, PROT_READ | PROT_WRITE))
 		// Add some way to see why it failed? gdb> info proc mappings
-		die("mprotect  failed...");
+		#ifndef IOS
+			die("mprotect  failed...");
+		#endif
 	return true;
 }
 
@@ -64,7 +68,9 @@ bool mem_region_set_exec(void *start, size_t len)
 {
 	size_t inpage = (uintptr_t)start & PAGE_MASK;
 	if (mprotect((u8*)start - inpage, len + inpage, PROT_READ | PROT_WRITE | PROT_EXEC))
-		die("mprotect  failed...");
+		#ifndef IOS
+			die("mprotect  failed...");
+		#endif
 	return true;
 }
 
