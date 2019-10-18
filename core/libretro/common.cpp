@@ -332,8 +332,10 @@ static void signal_handler(int sn, siginfo_t * si, void *segfault_ctx)
 	if (vmem32_handle_signal(si->si_addr, write, exception_pc))
 		return;
 #endif
-	//if (bm_RamWriteAccess(si->si_addr))
-	//	return;
+	#if FEAT_SHREC != DYNAREC_NONE
+		if (bm_RamWriteAccess(si->si_addr))
+			return;
+	#endif
 	if (VramLockedWrite((u8*)si->si_addr))
       return;
 #if !defined(TARGET_NO_NVMEM) && FEAT_SHREC != DYNAREC_NONE
