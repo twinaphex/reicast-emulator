@@ -1,3 +1,5 @@
+#include "vmem32.h"
+
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -16,6 +18,8 @@
 
 #define HANDLER_MAX 0x1F
 #define HANDLER_COUNT (HANDLER_MAX+1)
+
+bool vmem_4gb_space;
 
 //top registered handler
 _vmem_handler       _vmem_lrp;
@@ -716,6 +720,124 @@ die("BM_LockedWrite and NO REC");
 	return false;
 }
 
+static void _vmem_set_p0_mappings()
+{
+	const vmem_mapping mem_mappings[] = {
+		// P0/U0
+		{0x00000000, 0x00800000,                               0,         0, false},  // Area 0 -> unused
+		{0x00800000, 0x01000000,            MAP_ARAM_START_OFFSET, ARAM_SIZE, true},  // Aica
+		{0x01000000, 0x02800000,                               0,         0, false},  // unused
+		{0x02800000, 0x03000000,            MAP_ARAM_START_OFFSET, ARAM_SIZE, true},  // Aica mirror
+		{0x03000000, 0x04000000,                               0,         0, false},  // unused
+		{0x04000000, 0x05000000,           MAP_VRAM_START_OFFSET, VRAM_SIZE,  true},  // Area 1 (vram, 16MB, wrapped on DC as 2x8MB)
+		{0x05000000, 0x06000000,                               0,         0, false},  // 32 bit path (unused)
+		{0x06000000, 0x07000000,           MAP_VRAM_START_OFFSET, VRAM_SIZE,  true},  // VRAM mirror
+		{0x07000000, 0x08000000,                               0,         0, false},  // 32 bit path (unused) mirror
+		{0x08000000, 0x0C000000,                               0,         0, false},  // Area 2
+		{0x0C000000, 0x10000000,            MAP_RAM_START_OFFSET,  RAM_SIZE,  true},  // Area 3 (main RAM + 3 mirrors)
+		{0x10000000, 0x80000000,                               0,         0, false},  // Area 4-7 (unused)
+	};
+	vmem_platform_create_mappings(&mem_mappings[0], ARRAY_SIZE(mem_mappings));
+}
+
+void _vmem_unprotect_vram(u32 addr, u32 size)
+{
+	addr &= VRAM_MASK;
+	if (!mmu_enabled() || !_nvmem_4gb_space())
+	{
+		mem_region_unlock(virt_ram_base + 0x04000000 + addr, size);		// P0
+		//mem_region_unlock(virt_ram_base + 0x06000000 + addr, size);	// P0 - mirror
+		if (VRAM_SIZE == 0x800000)
+		{
+			// wraps when only 8MB VRAM
+			mem_region_unlock(virt_ram_base + 0x04000000 + addr + VRAM_SIZE, size);
+			//mem_region_unlock(virt_ram_base + 0x06000000 + addr + VRAM_SIZE, size);
+		}
+	}
+	if (_nvmem_4gb_space())
+	{
+		mem_region_unlock(virt_ram_base + 0x84000000 + addr, size);		// P1
+		//mem_region_unlock(virt_ram_base + 0x86000000 + addr, size);	// P1 - mirror
+		// We should also lock P2 and P3, and the mirrors, but they don't seem to be used...
+		//mem_region_unlock(virt_ram_base + 0xA4000000 + addr, size);	// P2
+		//mem_region_unlock(virt_ram_base + 0xA6000000 + addr, size);	// P2 - mirror
+		//mem_region_unlock(virt_ram_base + 0xC4000000 + addr, size);	// P3
+		//mem_region_unlock(virt_ram_base + 0xC6000000 + addr, size);	// P3 - mirror
+		if (VRAM_SIZE == 0x800000)
+		{
+			mem_region_unlock(virt_ram_base + 0x84000000 + addr + VRAM_SIZE, size);
+			//mem_region_unlock(virt_ram_base + 0x86000000 + addr + VRAM_SIZE, size);
+			//mem_region_unlock(virt_ram_base + 0xA4000000 + addr + VRAM_SIZE, size);
+			//mem_region_unlock(virt_ram_base + 0xC4000000 + addr + VRAM_SIZE, size);
+		}
+	}
+}
+
+u32 _vmem_get_vram_offset(void *addr)
+{
+	ptrdiff_t offset = (u8*)addr - virt_ram_base;
+	if (_nvmem_4gb_space())
+	{
+		if (mmu_enabled())
+		{
+			// Only kernel mirrors
+			if (offset < 0x80000000 || offset >= 0xE0000000)
+				return -1;
+		}
+		else
+		{
+			if (offset < 0 || offset >= 0xE0000000)
+				return -1;
+		}
+		offset &= 0x1FFFFFFF;
+	}
+	else
+	{
+		if (offset < 0 || offset >= 0x20000000)
+			return -1;
+	}
+	if ((offset >> 24) != 4)
+		return -1;
+	verify((((u8*)addr - virt_ram_base) >> 29) == 0 || (((u8*)addr - virt_ram_base) >> 29) == 4);	// others areas aren't mapped atm
+
+	return offset & VRAM_MASK;
+}
+
+void _vmem_protect_vram(u32 addr, u32 size)
+{
+	addr &= VRAM_MASK;
+	if (!mmu_enabled() || !_nvmem_4gb_space())
+	{
+		mem_region_lock(virt_ram_base + 0x04000000 + addr, size);	// P0
+		//mem_region_lock(virt_ram_base + 0x06000000 + addr, size);	// P0 - mirror
+		if (VRAM_SIZE == 0x800000)
+		{
+			// wraps when only 8MB VRAM
+			mem_region_lock(virt_ram_base + 0x04000000 + addr + VRAM_SIZE, size);
+			//mem_region_lock(virt_ram_base + 0x06000000 + addr + VRAM_SIZE, size);
+		}
+	}
+	if (_nvmem_4gb_space())
+	{
+		mem_region_lock(virt_ram_base + 0x84000000 + addr, size);	// P1
+		//mem_region_lock(virt_ram_base + 0x86000000 + addr, size);	// P1 - mirror
+		// We should also lock P2 and P3, and the mirrors, but they don't seem to be used...
+		//mem_region_lock(virt_ram_base + 0xA4000000 + addr, size);	// P2
+		//mem_region_lock(virt_ram_base + 0xA6000000 + addr, size);	// P2 - mirror
+		//mem_region_lock(virt_ram_base + 0xC4000000 + addr, size);	// P3
+		//mem_region_lock(virt_ram_base + 0xC6000000 + addr, size);	// P3 - mirror
+		if (VRAM_SIZE == 0x800000)
+		{
+			mem_region_lock(virt_ram_base + 0x84000000 + addr + VRAM_SIZE, size);
+			//mem_region_lock(virt_ram_base + 0x86000000 + addr + VRAM_SIZE, size);
+			//mem_region_lock(virt_ram_base + 0xA4000000 + addr + VRAM_SIZE, size);
+			//mem_region_lock(virt_ram_base + 0xC4000000 + addr + VRAM_SIZE, size);
+		}
+		vmem32_protect_vram(addr, size);
+	}
+}
+
+
 bool _vmem_reserve(void)
 {
 	void* ptr=0;
@@ -817,7 +939,31 @@ bool _vmem_reserve(void)
 }
 #endif
 
-void _vmem_release(void)
+void _vmem_enable_mmu(bool enable)
 {
-	//TODO
+	if (enable)
+	{
+		vmem32_init();
+	}
+	else
+	{
+		// Restore P0/U0 mem mappings
+		vmem32_term();
+		if (_nvmem_4gb_space())
+			_vmem_set_p0_mappings();
+	}
+}
+
+#define freedefptr(x) \
+	if (x) { free(x); x = NULL; }
+
+void _vmem_release() {
+	if (virt_ram_base)
+		vmem_platform_destroy();
+	else {
+		freedefptr(p_sh4rcb);
+		freedefptr(vram.data);
+		freedefptr(aica_ram.data);
+		freedefptr(mem_b.data);
+	}
 }
