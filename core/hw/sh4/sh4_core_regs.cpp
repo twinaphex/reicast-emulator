@@ -112,7 +112,7 @@ void SetFloatStatusReg(void)
             : "=r"(raa)
             : "r"(x), "r"(y)
            );
-#elif HOST_CPU == CPU_ARM64
+#elif HOST_CPU == CPU_ARM64 || defined(IOS)
 		static const unsigned long off_mask = 0x04080000;
         unsigned long on_mask = 0x02000000;    // DN=1 Any operation involving one or more NaNs returns the Default NaN
 

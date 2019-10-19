@@ -2031,7 +2031,9 @@ bool retro_unserialize(const void * data, size_t size)
 #ifndef NO_MMU
     mmu_flush_table();
 #endif
-    bm_Reset();
+    #if FEAT_SHREC != DYNAREC_NONE
+        bm_Reset();
+    #endif
 
     result = dc_unserialize(&data_ptr, &total_size, size) ;
 
