@@ -617,10 +617,11 @@ else ifneq (,$(findstring ios,$(platform)))
 	fpic = -fPIC
 	GL_LIB := -framework OpenGLES
 	ifeq ($(platform), ios-arm64)
+		NO_REC = 1
 		NO_EXCEPTIONS = 1
 		CC = clang -arch arm64 -isysroot $(IOSSDK)
 		CXX = clang++ -arch arm64 -isysroot $(IOSSDK)
-		CXXFLAGS += -DIOS -DHAVE_OPENGLES3 -DFEAT_AREC=DYNAREC_NONE -DFEAT_DSPREC=DYNAREC_NONE -DFEAT_SHREC=DYNAREC_NONE
+		CXXFLAGS += -DIOS -DHAVE_OPENGLES3
 		CFLAGS += -Wno-error=implicit-function-declaration -DIOS -DHAVE_OPENGLES3
 		HAVE_GENERIC_JIT := 0
 		WITH_DYNAREC = DYNAREC_NONE
