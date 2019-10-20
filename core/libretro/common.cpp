@@ -256,10 +256,10 @@ static void context_segfault(rei_host_context_t* reictx, void* segfault_ctx, boo
 #endif
 #elif HOST_CPU == CPU_MIPS
    bicopy(reictx->pc, MCTX(.pc), to_segfault);
-#elif HOST_CPU == CPU_GENERIC
+#elif HOST_CPU == CPU_GENERIC || HOST_CPU == DYNAREC_NONE
    //nothing!
 #else
-//#error Unsupported HOST_CPU
+#error Unsupported HOST_CPU
 #endif
 #endif
 }
