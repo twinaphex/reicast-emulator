@@ -618,7 +618,6 @@ else ifneq (,$(findstring ios,$(platform)))
 	GL_LIB := -framework OpenGLES
 	ifeq ($(platform), ios-arm64)
 		NO_REC = 1
-		NO_EXCEPTIONS = 1
 		CC = clang -arch arm64 -isysroot $(IOSSDK)
 		CXX = clang++ -arch arm64 -isysroot $(IOSSDK)
 		CXXFLAGS += -DIOS -DHAVE_OPENGLES3
