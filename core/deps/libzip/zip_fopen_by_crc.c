@@ -1,5 +1,5 @@
 /*
-  zip_fopen.c -- open file in zip archive for reading
+  zip_fopen_by_crc.c -- open file in zip archive for reading
   Copyright (C) 1999-2007 Dieter Baron and Thomas Klausner
 
   This file is part of libzip, a library to manipulate ZIP archives.
