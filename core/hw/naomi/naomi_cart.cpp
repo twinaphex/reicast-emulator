@@ -292,6 +292,10 @@ static bool naomi_cart_LoadZip(char *filename)
 		{
 			ArchiveFile* file = NULL;
 			if (archive != NULL)
+				file = archive->OpenFileByCrc(game->blobs[romid].crc);
+			if (file == NULL && parent_archive != NULL)
+				file = parent_archive->OpenFileByCrc(game->blobs[romid].crc);
+			if (file == NULL && archive != NULL)
 				file = archive->OpenFile(game->blobs[romid].filename);
 			if (file == NULL && parent_archive != NULL)
 				file = parent_archive->OpenFile(game->blobs[romid].filename);

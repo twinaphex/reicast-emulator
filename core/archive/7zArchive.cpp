@@ -81,6 +81,11 @@ ArchiveFile* SzArchive::OpenFile(const char* name)
 	return NULL;
 }
 
+ArchiveFile* SzArchive::OpenFileByCrc(u32 crc)
+{
+	return NULL;
+}
+
 SzArchive::~SzArchive()
 {
 	if (lookStream.buf != NULL)
