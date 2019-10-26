@@ -83,6 +83,8 @@ ArchiveFile* SzArchive::OpenFile(const char* name)
 
 ArchiveFile* SzArchive::OpenFileByCrc(u32 crc)
 {
+	if (crc == 0)
+		return NULL;
 	for (int i = 0; i < szarchive.NumFiles; i++)
 	{
 		unsigned isDir = SzArEx_IsDir(&szarchive, i);
