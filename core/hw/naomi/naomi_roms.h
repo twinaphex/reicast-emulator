@@ -344,26 +344,14 @@ Games[] =
         REGION_AUSTRALIA,
         ROT0,
         {
-            { "epr-24217.ic11",  0x0000000, 0x0400000, 0x00000000 },
-            { "mpr-24218.ic17s", 0x1000000, 0x0800000, 0x00000000, InterleavedWord },
-            { "mpr-24219.ic18",  0x1000002, 0x0800000, 0x00000000, InterleavedWord },
-            { "mpr-24220.ic19s", 0x2000000, 0x0800000, 0x00000000, InterleavedWord },
-            { "mpr-24221.ic20",  0x2000002, 0x0800000, 0x00000000, InterleavedWord },
-            { "mpr-24222.ic21s", 0x3000000, 0x0800000, 0x00000000, InterleavedWord },
-            { "mpr-24223.ic22",  0x3000002, 0x0800000, 0x00000000, InterleavedWord },
+            { "epr-24217.ic11",  0x0000000, 0x0400000, 0x5ecf807b },
+            { "mpr-24218.ic17s", 0x1000000, 0x0800000, 0xe8c51e1d, InterleavedWord },
+            { "mpr-24219.ic18",  0x1000002, 0x0800000, 0xb0a5709f, InterleavedWord },
+            { "mpr-24220.ic19s", 0x2000000, 0x0800000, 0x9f6cefe2, InterleavedWord },
+            { "mpr-24221.ic20",  0x2000002, 0x0800000, 0x73bf9cc6, InterleavedWord },
+            { "mpr-24222.ic21s", 0x3000000, 0x0800000, 0x7098e728, InterleavedWord },
+            { "mpr-24223.ic22",  0x3000002, 0x0800000, 0xeca13c90, InterleavedWord },
             { "copy",            0x0400000, 0x0c00000, 0x00000000, Copy, 0x1000000 },
-            
-            //ROM_REGION(0x200, "some_eeprom", 0)
-            //{ "25lc040.ic13s", 0, 0x200, CRC(9adb86c2) SHA1(682d06b2004809c3c7ff2f4f9bc0bde0e51885c0) )
-            
-            // MUSHIKING
-            // The King of Beetle
-            // TYPE-1
-            // 800
-            // note: this dump from "empty/dead" Management Chip with no game run count left
-            //ROM_REGION( 0x80, "rf_tag", 0 )
-            //{ "mushi_type1.bin", 0, 0x80, CRC(8f36572b) SHA1(87e00e56d07a961e9180c7da02e35f7fd216dbae) )
-            
             { NULL, 0, 0, 0x00000000 },
         }
     },
@@ -578,26 +566,14 @@ Games[] =
         REGION_AUSTRALIA,
         ROT0,
         {
-            { "epr-24217-1002.ic11", 0x0000000, 0x0400000, 0x00000000 },
-            { "mpr-24218.ic17s",     0x1000000, 0x0800000, 0x00000000, InterleavedWord },
-            { "mpr-24219.ic18",      0x1000002, 0x0800000, 0x00000000, InterleavedWord },
-            { "mpr-24220.ic19s",     0x2000000, 0x0800000, 0x00000000, InterleavedWord },
-            { "mpr-24221.ic20",      0x2000002, 0x0800000, 0x00000000, InterleavedWord },
-            { "mpr-24222.ic21s",     0x3000000, 0x0800000, 0x00000000, InterleavedWord },
-            { "mpr-24223.ic22",      0x3000002, 0x0800000, 0x00000000, InterleavedWord },
+            { "epr-24217-1002.ic11", 0x0000000, 0x0400000, 0x90e411bf },
+            { "mpr-24218.ic17s",     0x1000000, 0x0800000, 0xe8c51e1d, InterleavedWord },
+            { "mpr-24219.ic18",      0x1000002, 0x0800000, 0xb0a5709f, InterleavedWord },
+            { "mpr-24220.ic19s",     0x2000000, 0x0800000, 0x9f6cefe2, InterleavedWord },
+            { "mpr-24221.ic20",      0x2000002, 0x0800000, 0x73bf9cc6, InterleavedWord },
+            { "mpr-24222.ic21s",     0x3000000, 0x0800000, 0x7098e728, InterleavedWord },
+            { "mpr-24223.ic22",      0x3000002, 0x0800000, 0xeca13c90, InterleavedWord },
             { "copy",                0x0400000, 0x0c00000, 0x00000000, Copy, 0x1000000 },
-            
-            //ROM_REGION(0x200, "some_eeprom", 0)
-            //{ "25lc040.ic13s", 0, 0x200, CRC(9adb86c2) SHA1(682d06b2004809c3c7ff2f4f9bc0bde0e51885c0) )
-            
-            // MUSHIKING
-            // The King of Beetle
-            // TYPE-1
-            // 800
-            // note: this dump from "empty/dead" Management Chip with no game run count left
-            //ROM_REGION( 0x80, "rf_tag", 0 )
-            //{ "mushi_type1.bin", 0, 0x80, CRC(8f36572b) SHA1(87e00e56d07a961e9180c7da02e35f7fd216dbae) )
-            
             { NULL, 0, 0, 0x00000000 },
         }
     },
@@ -1341,14 +1317,36 @@ Games[] =
         REGION_AUSTRALIA,
         ROT0,
         {
-            { "epr-22336d.ic22", 0x0000000, 0x0400000, 0x00000000 },
-            { "mpr-22328.ic1",   0x0800000, 0x1000000, 0x00000000 },
-            { "mpr-22329.ic2",   0x1800000, 0x1000000, 0x00000000 },
-            { "mpr-22330.ic3",   0x2800000, 0x1000000, 0x00000000 },
-            { "mpr-22331.ic4",   0x3800000, 0x1000000, 0x00000000 },
-            { "mpr-22332.ic5",   0x4800000, 0x1000000, 0x00000000 },
-            { "mpr-22337.ic6",   0x5800000, 0x1000000, 0x00000000 },
-            { "mpr-22338.ic7",   0x6800000, 0x1000000, 0x00000000 },
+            { "epr-22336d.ic22", 0x0000000, 0x0400000, 0xe6c0cb0c },
+            { "mpr-22328.ic1",   0x0800000, 0x1000000, 0x179cec02 },
+            { "mpr-22329.ic2",   0x1800000, 0x1000000, 0xe0d5b98c },
+            { "mpr-22330.ic3",   0x2800000, 0x1000000, 0x6737cd62 },
+            { "mpr-22331.ic4",   0x3800000, 0x1000000, 0x8fb5cbcf },
+            { "mpr-22332.ic5",   0x4800000, 0x1000000, 0xc5e365a8 },
+            { "mpr-22333.ic6",   0x5800000, 0x1000000, 0x96f324aa },
+            { "mpr-22334.ic7",   0x6800000, 0x1000000, 0x5389b05a },
+            { NULL, 0, 0, 0x00000000 },
+        }
+    },
+    // Derby Owners Club World Edition (Rev A)
+    {
+        "drbyocwa",
+        "derbyocw",
+        0x7800000,
+        0xffffffff, // not populated
+        NULL,
+        M2,
+        REGION_AUSTRALIA,
+        ROT0,
+        {
+            { "epr-22336a.ic22", 0x0000000, 0x0400000, 0x56dee69a },
+            { "mpr-22328.ic1",   0x0800000, 0x1000000, 0x179cec02 },
+            { "mpr-22329.ic2",   0x1800000, 0x1000000, 0xe0d5b98c },
+            { "mpr-22330.ic3",   0x2800000, 0x1000000, 0x6737cd62 },
+            { "mpr-22331.ic4",   0x3800000, 0x1000000, 0x8fb5cbcf },
+            { "mpr-22332.ic5",   0x4800000, 0x1000000, 0xc5e365a8 },
+            { "mpr-22333.ic6",   0x5800000, 0x1000000, 0x96f324aa },
+            { "mpr-22334.ic7",   0x6800000, 0x1000000, 0x5389b05a },
             { NULL, 0, 0, 0x00000000 },
         }
     },
@@ -1363,14 +1361,14 @@ Games[] =
         REGION_AUSTRALIA,
         ROT0,
         {
-            { "epr-22336b.ic22", 0x000000,  0x400000 , 0x00000000 },
-            { "mpr-22328.ic1",   0x0800000, 0x1000000, 0x00000000 },
-            { "mpr-22329.ic2",   0x1800000, 0x1000000, 0x00000000 },
-            { "mpr-22330.ic3",   0x2800000, 0x1000000, 0x00000000 },
-            { "mpr-22331.ic4",   0x3800000, 0x1000000, 0x00000000 },
-            { "mpr-22332.ic5",   0x4800000, 0x1000000, 0x00000000 },
-            { "mpr-22333.ic6",   0x5800000, 0x1000000, 0x00000000 },
-            { "mpr-22334.ic7",   0x6800000, 0x1000000, 0x00000000 },
+            { "epr-22336b.ic22", 0x0000000, 0x0400000, 0x8df5434b },
+            { "mpr-22328.ic1",   0x0800000, 0x1000000, 0x179cec02 },
+            { "mpr-22329.ic2",   0x1800000, 0x1000000, 0xe0d5b98c },
+            { "mpr-22330.ic3",   0x2800000, 0x1000000, 0x6737cd62 },
+            { "mpr-22331.ic4",   0x3800000, 0x1000000, 0x8fb5cbcf },
+            { "mpr-22332.ic5",   0x4800000, 0x1000000, 0xc5e365a8 },
+            { "mpr-22333.ic6",   0x5800000, 0x1000000, 0x96f324aa },
+            { "mpr-22334.ic7",   0x6800000, 0x1000000, 0x5389b05a },
             { NULL, 0, 0, 0x00000000 },
         }
     },
@@ -1385,14 +1383,14 @@ Games[] =
         REGION_AUSTRALIA,
         ROT0,
         {
-            { "epr-22336c.ic22", 0x000000,  0x400000 , 0x00000000 },
-            { "mpr-22328.ic1",   0x0800000, 0x1000000, 0x00000000 },
-            { "mpr-22329.ic2",   0x1800000, 0x1000000, 0x00000000 },
-            { "mpr-22330.ic3",   0x2800000, 0x1000000, 0x00000000 },
-            { "mpr-22331.ic4",   0x3800000, 0x1000000, 0x00000000 },
-            { "mpr-22332.ic5",   0x4800000, 0x1000000, 0x00000000 },
-            { "mpr-22333.ic6",   0x5800000, 0x1000000, 0x00000000 },
-            { "mpr-22334.ic7",   0x6800000, 0x1000000, 0x00000000 },
+            { "epr-22336c.ic22", 0x0000000, 0x0400000, 0x50053f82 },
+            { "mpr-22328.ic1",   0x0800000, 0x1000000, 0x179cec02 },
+            { "mpr-22329.ic2",   0x1800000, 0x1000000, 0xe0d5b98c },
+            { "mpr-22330.ic3",   0x2800000, 0x1000000, 0x6737cd62 },
+            { "mpr-22331.ic4",   0x3800000, 0x1000000, 0x8fb5cbcf },
+            { "mpr-22332.ic5",   0x4800000, 0x1000000, 0xc5e365a8 },
+            { "mpr-22333.ic6",   0x5800000, 0x1000000, 0x96f324aa },
+            { "mpr-22334.ic7",   0x6800000, 0x1000000, 0x5389b05a },
             { NULL, 0, 0, 0x00000000 },
         }
     },
@@ -2248,21 +2246,13 @@ Games[] =
         REGION_AUSTRALIA,
         ROT0,
         {
-            { "rom1.ic1s", 0x0800000, 0x800000, 0x00000000 },
-            { "rom2.ic2s", 0x1000000, 0x800000, 0x00000000 },
-            { "rom3.ic3s", 0x1800000, 0x800000, 0x00000000 },
-            { "rom4.ic4s", 0x2000000, 0x800000, 0x00000000 },
-            { "rom5.ic5s", 0x2800000, 0x800000, 0x00000000 },
-            { "rom6.ic6s", 0x3000000, 0x800000, 0x00000000 },
-            { "rom7.ic7s", 0x3800000, 0x800000, 0x00000000 },        
-            // not used, contain random garbage
-            // ROM_LOAD( "rom8.ic8s",    0x4000000, 0x800000, CRC(a1d1339e) SHA1(2f5dd8472c3b983bce7d14e076c8cb7b6bd535ff) )
-            // ROM_LOAD( "rom9.ic9s",    0x4800000, 0x800000, CRC(a1d1339e) SHA1(2f5dd8472c3b983bce7d14e076c8cb7b6bd535ff) )
-            // ROM_LOAD( "rom10.ic10s",  0x5000000, 0x800000, CRC(a1d1339e) SHA1(2f5dd8472c3b983bce7d14e076c8cb7b6bd535ff) )
-            // ROM_LOAD( "rom11.ic11s",  0x5800000, 0x800000, CRC(a1d1339e) SHA1(2f5dd8472c3b983bce7d14e076c8cb7b6bd535ff) )
-            
-            //ROM_REGION(0x84, "some_eeprom", 0)
-            //ROM_LOAD("sflash.ic37", 0x000000, 0x000084, CRC(88f1db52) SHA1(5ebfa6c45abf2fa6f560832f366ed03ca91709a5) )
+            { "rom1.ic1s", 0x0800000, 0x800000, 0x9cdc8dcb },
+            { "rom2.ic2s", 0x1000000, 0x800000, 0x7b637bb6 },
+            { "rom3.ic3s", 0x1800000, 0x800000, 0x6c6ddfbf },
+            { "rom4.ic4s", 0x2000000, 0x800000, 0xa427002d },
+            { "rom5.ic5s", 0x2800000, 0x800000, 0x7076a50e },
+            { "rom6.ic6s", 0x3000000, 0x800000, 0xd7143066 },
+            { "rom7.ic7s", 0x3800000, 0x800000, 0x98839bab },
             { NULL, 0, 0, 0x00000000 },
         }
     },
@@ -5454,7 +5444,7 @@ Games[] =
         REGION_AUSTRALIA,
         ROT0,
         {
-            { "317-0352-jpn.pic", 0, 0x4000, 0x00000000 },
+            { "317-0352-jpn.pic", 0, 0x4000, 0xc2c45f9c },
             { NULL, 0, 0, 0x00000000 },
         },
         "cdp-10002b",
