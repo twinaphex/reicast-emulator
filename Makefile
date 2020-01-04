@@ -152,7 +152,6 @@ ifneq (,$(findstring unix,$(platform)))
 		LDFLAGS += -m32
 		HAVE_GENERIC_JIT = 0
 	endif
-	HAVE_VULKAN = 1
 	PLATFORM_EXT := unix
 
 # Raspberry Pi
