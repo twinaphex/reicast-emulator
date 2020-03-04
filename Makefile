@@ -196,6 +196,7 @@ else ifneq (,$(findstring rpi,$(platform)))
 		endif
 		CORE_DEFINES += -DLOW_END
 	endif
+	LDFLAGS += $(CFLAGS)
 	PLATFORM_EXT := unix
 	WITH_DYNAREC=arm
 	HAVE_GENERIC_JIT = 0
@@ -889,7 +890,9 @@ ifeq ($(DEBUG),1)
 else
 	ifneq (,$(findstring msvc,$(platform)))
 		OPTFLAGS       := -O2
-	else ifneq ($(platform), classic_armv7_a7)
+	else ifeq ($(WITH_DYNAREC), arm)
+		OPTFLAGS       := -O2
+	else
 		OPTFLAGS       := -O3
 	endif
 
