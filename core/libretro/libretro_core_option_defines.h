@@ -1,6 +1,6 @@
 #ifndef LIBRETRO_CORE_OPTION_DEFINES_H__
 #define LIBRETRO_CORE_OPTION_DEFINES_H__
 
-#define CORE_OPTION_NAME "reicast"
+#define CORE_OPTION_NAME "flycast"
 
 #endif
