@@ -46,11 +46,13 @@
 #include "cdrom.h"
 #include "flac.h"
 #include "huffman.h"
-#include "LzmaEnc.h"
-#include "LzmaDec.h"
-#include "md5.h"
-#include "sha1.h"
-#include "zlib.h"
+#ifdef USE_LZMA
+	#include "../lzma/C/LzmaEnc.h"
+	#include "../lzma/C/LzmaDec.h"
+#endif
+#include "deps/crypto/md5.h"
+#include "deps/crypto/sha1.h"
+#include "deps/zlib/zlib.h"
 
 #define TRUE 1
 #define FALSE 0
