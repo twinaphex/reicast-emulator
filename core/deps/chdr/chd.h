@@ -202,13 +202,8 @@ extern "C" {
 #define CHDCOMPRESSION_ZLIB_PLUS	2
 #define CHDCOMPRESSION_AV			3
 
-/* general codecs */
-#define CHD_CODEC_NONE 				0
+#define CHD_CODEC_NONE 0
 #define CHD_CODEC_ZLIB				CHD_MAKE_TAG('z','l','i','b')
-#define CHD_CODEC_LZMA				CHD_MAKE_TAG('l','z','m','a')
-#define CHD_CODEC_HUFFMAN			CHD_MAKE_TAG('h','u','f','f')
-#define CHD_CODEC_FLAC				CHD_MAKE_TAG('f','l','a','c')
-
 /* general codecs with CD frontend */
 #define CHD_CODEC_CD_ZLIB			CHD_MAKE_TAG('c','d','z','l')
 #define CHD_CODEC_CD_LZMA			CHD_MAKE_TAG('c','d','l','z')
@@ -364,6 +359,8 @@ struct _chd_verify_result
 /* open an existing CHD file */
 chd_error chd_open(const char *filename, int mode, chd_file *parent, chd_file **chd);
 
+/* precache underlying file */
+chd_error chd_precache(chd_file *chd);
 
 /* close a CHD file */
 void chd_close(chd_file *chd);
