@@ -892,7 +892,7 @@ else
 	ifneq (,$(findstring msvc,$(platform)))
 		OPTFLAGS       := -O2
 	else ifneq ($(platform), classic_armv7_a7)
-		OPTFLAGS       := -O2
+		OPTFLAGS       := -O3
 	endif
 
 	CORE_DEFINES   += -DNDEBUG
