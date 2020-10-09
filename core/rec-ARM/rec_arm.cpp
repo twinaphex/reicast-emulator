@@ -1111,36 +1111,58 @@ bool ngen_readm_immediate(RuntimeBlockInfo* block, shil_opcode* op, bool staging
 	}
 	else
 	{
-		MOV32(r0,op->rs1._imm);
-		CALL((u32)ptr);
-
-		switch(optp)
+		if (optp == SZ_64F)
 		{
-		case SZ_8:
-			SXTB(r0, r0);
-			break;
-
-		case SZ_16:
-			SXTH(r0, r0);
-			break;
-
-		case SZ_32I:
-		case SZ_32F:
-			break;
-
-		case SZ_64F:
-			//die("SZ_64F not supported");
-			break;
+			//verify(!regalloc.IsAllocAny(op.rd));
+			// Need to call the handler twice
+			//Mov(w0, addr);
+			MOV32(r0,op->rs1._imm);
+			//GenCallRuntime((void (*)())ptr);
+			CALL((u32)ptr);
+			//Str(w0, sh4_context_mem_operand(op.rd.reg_ptr()));
+			VLDR(d0, r0, 0);
+			VSTR(d0, r8, op->rd.reg_nofs() / 4);
+			//Mov(w0, addr + 4);
+			MOV32(r0, op->rs1._imm + SZ_32F);
+			//GenCallRuntime((void (*)())ptr);
+			CALL((u32)ptr);
+			//Str(w0, sh4_context_mem_operand((u8*)op.rd.reg_ptr() + 4));
+			VLDR(d0, r0, 0);
+			VSTR(d0, r8, ((op->rd.reg_nofs()) / 4)+SZ_32F/4);
 		}
+		else
+		{
+			MOV32(r0,op->rs1._imm);
+			CALL((u32)ptr);
 
-		if (reg.IsAllocg(op->rd))
-			MOV(rd, r0);
-		else if (reg.IsAllocf(op->rd))
-			VMOV(reg.mapfs(op->rd), r0);
-		else {
-			//die("Unsupported");
-			ERROR_LOG(DYNAREC, "Unsupported");
-			VMOV(reg.mapfs(op->rd), r0);
+			switch(optp)
+			{
+			case SZ_8:
+				SXTB(r0, r0);
+				break;
+
+			case SZ_16:
+				SXTH(r0, r0);
+				break;
+
+			case SZ_32I:
+			case SZ_32F:
+				break;
+
+			case SZ_64F:
+				//die("SZ_64F not supported");
+				break;
+			}
+
+			if (reg.IsAllocg(op->rd))
+				MOV(rd, r0);
+			else if (reg.IsAllocf(op->rd))
+				VMOV(reg.mapfs(op->rd), r0);
+			else {
+				//die("Unsupported");
+				ERROR_LOG(DYNAREC, "Unsupported");
+				VMOV(reg.mapfs(op->rd), r0);
+			}
 		}
 	}
 
