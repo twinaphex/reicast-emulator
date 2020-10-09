@@ -204,7 +204,8 @@ public:
 	{
 		if (prm.is_reg())
 		{
-			verify(prm.count() == 1);
+			ssa_printf("Reg Count: %u", prm.count());
+			//verify(prm.count() == 1);
 			return IsAllocf(prm._reg);
 		}
 		else

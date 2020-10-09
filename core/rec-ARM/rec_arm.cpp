@@ -1076,7 +1076,10 @@ bool ngen_readm_immediate(RuntimeBlockInfo* block, shil_opcode* op, bool staging
 
 	mem_op_type optp=memop_type(op);
 	bool isram=false;
-	void* ptr = _vmem_read_const(op->rs1._imm, isram, max(4u, memop_bytes(optp)));
+	//void* ptr = _vmem_read_const(op->rs1._imm, isram, max(4u, memop_bytes(optp)));
+
+	u32 size = memop_bytes(optp);
+	void* ptr = _vmem_read_const(op->rs1._imm, isram, size > 4 ? 4 : size);
 	eReg rd = (optp != SZ_32F && optp != SZ_64F) ? reg.mapg(op->rd) : r0;
 				
 	if (isram)
@@ -1126,7 +1129,7 @@ bool ngen_readm_immediate(RuntimeBlockInfo* block, shil_opcode* op, bool staging
 			break;
 
 		case SZ_64F:
-			die("SZ_64F not supported");
+			//die("SZ_64F not supported");
 			break;
 		}
 
@@ -1134,8 +1137,11 @@ bool ngen_readm_immediate(RuntimeBlockInfo* block, shil_opcode* op, bool staging
 			MOV(rd, r0);
 		else if (reg.IsAllocf(op->rd))
 			VMOV(reg.mapfs(op->rd), r0);
-		else
-			die("Unsupported");
+		else {
+			//die("Unsupported");
+			ERROR_LOG(DYNAREC, "Unsupported");
+			VMOV(reg.mapfs(op->rd), r0);
+		}
 	}
 
 	return true;
