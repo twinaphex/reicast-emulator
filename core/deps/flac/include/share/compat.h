@@ -29,7 +29,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* This is the prefered location of all CPP hackery to make $random_compiler
+/* This is the preferred location of all CPP hackery to make $random_compiler
  * work like something approaching a C99 (or maybe more accurately GNU99)
  * compiler.
  *
@@ -49,15 +49,13 @@
 #if defined _MSC_VER || defined __BORLANDC__ || defined __MINGW32__
 #include <sys/types.h> /* for off_t */
 #define FLAC__off_t __int64 /* use this instead of off_t to fix the 2 GB limit */
-#if !defined __MINGW32__ && _MSC_VER && _MSC_VER > 1310
+#if !defined __MINGW32__
 #define fseeko _fseeki64
 #define ftello _ftelli64
 #else /* MinGW */
 #if !defined(HAVE_FSEEKO)
-#if _MSC_VER && _MSCVER > 1310
 #define fseeko fseeko64
 #define ftello ftello64
-#endif
 #endif
 #endif
 #else
@@ -74,7 +72,7 @@
 #define strtoull _strtoui64
 #endif
 
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__cplusplus)
 #define inline __inline
 #endif
 
@@ -100,7 +98,7 @@
 #define FLAC__STRNCASECMP strncasecmp
 #endif
 
-#if defined _MSC_VER || defined __MINGW32__ || defined __CYGWIN__ || defined __EMX__
+#if defined _MSC_VER || defined __MINGW32__ || defined __EMX__
 #include <io.h> /* for _setmode(), chmod() */
 #include <fcntl.h> /* for _O_BINARY */
 #else
@@ -132,21 +130,13 @@
 #    ifndef UINT32_MAX
 #      define UINT32_MAX _UI32_MAX
 #    endif
-     typedef unsigned __int64 uint64_t;
-     typedef unsigned __int32 uint32_t;
-     typedef unsigned __int16 uint16_t;
-     typedef unsigned __int8 uint8_t;
-     typedef __int64 int64_t;
-     typedef __int32 int32_t;
-     typedef __int16 int16_t;
-     typedef __int8  int8_t;
 #    define PRIu64 "I64u"
 #    define PRId64 "I64d"
 #    define PRIx64 "I64x"
 #  endif
 #endif /* defined _MSC_VER */
 
-#if defined(_WIN32) && defined(NEED_UTF8_SUPPORT)
+#ifdef _WIN32
 /* All char* strings are in UTF-8 format. Added to support Unicode files on Windows */
 
 #include "share/win_utf8_io.h"
@@ -177,12 +167,16 @@
 
 #endif
 
-#if defined _MSC_VER
+#ifdef _WIN32
 #define flac_stat_s __stat64 /* stat struct */
 #define flac_fstat _fstat64
 #else
 #define flac_stat_s stat /* stat struct */
 #define flac_fstat fstat
+#endif
+
+#ifdef ANDROID
+#include <limits.h>
 #endif
 
 #ifndef M_LN2
@@ -199,7 +193,6 @@
  * This function wraps the MS version to behave more like the ISO version.
  */
 #include <stdarg.h>
-#include <stddef.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
