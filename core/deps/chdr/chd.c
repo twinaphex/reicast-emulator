@@ -472,7 +472,7 @@ void *lzma_fast_alloc(void *p, size_t size)
 
 			/* compute aligned address, store it */
 			vaddr = (uintptr_t)addr;
-			vaddr = (vaddr + sizeof(uint32_t) + (LZMA_MIN_ALIGNMENT_BYTES-1)) & ~LZMA_MIN_ALIGNMENT_BYTES;
+			vaddr = (vaddr + sizeof(uint32_t) + (LZMA_MIN_ALIGNMENT_BYTES-1)) & (~(LZMA_MIN_ALIGNMENT_BYTES-1));
 			codec->allocptr2[scan] = (uint32_t*)vaddr;
 			break;
 		}
@@ -2619,7 +2619,7 @@ static voidpf zlib_fast_alloc(voidpf opaque, uInt items, uInt size)
 		if (!alloc->allocptr[i])
 		{
 			alloc->allocptr[i] = ptr;
-			paddr = (((uintptr_t)ptr) + sizeof(UINT32) + (ZLIB_MIN_ALIGNMENT_BYTES-1)) & (~ZLIB_MIN_ALIGNMENT_BYTES);
+			paddr = (((uintptr_t)ptr) + sizeof(UINT32) + (ZLIB_MIN_ALIGNMENT_BYTES-1)) & (~(ZLIB_MIN_ALIGNMENT_BYTES-1));
 			alloc->allocptr2[i] = (uint32_t*)paddr;
 			break;
 		}
