@@ -25,11 +25,12 @@
 VulkanContext *VulkanContext::contextInstance;
 
 static const char *PipelineCacheFileName = "vulkan_pipeline.cache";
+static int vkMinor = 0;
 
 const VkApplicationInfo* VkGetApplicationInfo()
 {
-	// FIXME How to figure out if vulkan 1.1 is supported?
-	static vk::ApplicationInfo applicationInfo("Flycast", 1, "Flycast", 1, VK_API_VERSION_1_1);
+	// FIXME How to figure out which vulkan version is supported in this early call ? Are we supposed to only set the min compatible version here ?
+	static vk::ApplicationInfo applicationInfo("Flycast", 1, "Flycast", 1, VK_API_VERSION_1_0);
 	return &(VkApplicationInfo&)applicationInfo;
 }
 
@@ -44,6 +45,13 @@ bool VkCreateDevice(retro_vulkan_context* context, VkInstance instance, VkPhysic
 	vulkan_symbol_wrapper_load_global_symbols();
 	vulkan_symbol_wrapper_load_core_symbols(instance);
 	VULKAN_SYMBOL_WRAPPER_LOAD_INSTANCE_EXTENSION_SYMBOL(instance, vkGetPhysicalDeviceSurfaceSupportKHR);
+
+	if (::vkEnumerateInstanceVersion != nullptr)
+	{
+		u32 apiVersion;
+		if (vk::enumerateInstanceVersion(&apiVersion) == vk::Result::eSuccess)
+			vkMinor = VK_VERSION_MINOR(apiVersion);
+	}
 
 	vk::PhysicalDevice physicalDevice(gpu);
 	if (gpu == VK_NULL_HANDLE)
@@ -181,7 +189,8 @@ bool VulkanContext::Init(retro_hw_render_interface_vulkan *retro_render_if)
 	queue = vk::Queue(retro_render_if->queue);
 
 	vk::PhysicalDeviceProperties *properties;
-	if (::vkGetPhysicalDeviceFormatProperties2 != nullptr)
+	// FIXME Maybe we need further granularity for vk1.2 ?
+	if (vkMinor > 0)
 	{
 		static vk::PhysicalDeviceProperties2 properties2;
 		vk::PhysicalDeviceMaintenance3Properties properties3;
