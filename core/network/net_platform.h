@@ -5,19 +5,21 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
 #ifdef HAVE_LIBNX
-// What is this ? Is it needed ?
 #include <switch.h>
+#define INADDR_NONE 0xffffffff
+#define INET_ADDRSTRLEN sizeof(struct sockaddr_in)
 #define SOL_TCP 6 // Shrug
 #elif defined(VITA)
 #include <vitasdk.h>
 #define SOL_TCP 6 // Shrug
+#else
+#include <netinet/ip.h>
 #endif // HAVE_LIBNX
 
-#include <netinet/ip.h>
 #include <netinet/tcp.h>
-#include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
 #include <fcntl.h>
