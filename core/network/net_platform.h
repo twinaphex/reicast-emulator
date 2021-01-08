@@ -15,6 +15,7 @@
 #elif defined(VITA)
 #include <vitasdk.h>
 #define SOL_TCP 6 // Shrug
+#define inet_ntop sceNetInetNtop
 #else
 #include <netinet/ip.h>
 #endif // HAVE_LIBNX

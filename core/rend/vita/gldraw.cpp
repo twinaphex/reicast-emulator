@@ -78,60 +78,6 @@ extern u32 gcflip;
 GLuint vmuTextureId[4]={0,0,0,0};
 GLuint lightgunTextureId[4]={0,0,0,0};
 
-s32 SetTileClip(u32 val, GLint uniform)
-{
-	u32 clipmode=val>>28;
-	s32 clip_mode;
-	if (clipmode<2)
-		clip_mode=0;    //always passes
-	else if (clipmode&1)
-		clip_mode=-1;   //render stuff outside the region
-	else
-		clip_mode=1;    //render stuff inside the region
-
-	float csx = val & 63;
-	float cex = (val >> 6) & 63;
-	float csy = (val >> 12) & 31;
-	float cey = (val >> 17) & 31;
-	csx=csx*32;
-	cex=cex*32 +32;
-	csy=csy*32;
-	cey=cey*32 +32;
-
-	if (csx <= 0 && csy <= 0 && cex >= 640 && cey >= 480)
-		return 0;
-	
-	if (uniform >= 0 && clip_mode)
-   {
-      if (!pvrrc.isRTT)
-      {
-         csx /= scale_x;
-         csy /= scale_y;
-         cex /= scale_x;
-         cey /= scale_y;
-         float t = cey;
-         cey = 480 - csy;
-         csy = 480 - t;
-         float dc2s_scale_h = screen_height / 480.0f;
-         float ds2s_offs_x = (screen_width - dc2s_scale_h * 640) / 2;
-         csx = csx * dc2s_scale_h + ds2s_offs_x;
-         cex = cex * dc2s_scale_h + ds2s_offs_x;
-         csy = csy * dc2s_scale_h;
-         cey = cey * dc2s_scale_h;
-      }
-      else if (!settings.rend.RenderToTextureBuffer)
-		{
-			csx *= settings.rend.RenderToTextureUpscale;
-			csy *= settings.rend.RenderToTextureUpscale;
-			cex *= settings.rend.RenderToTextureUpscale;
-			cey *= settings.rend.RenderToTextureUpscale;
-		}
-		glUniform4f(uniform, csx, csy, cex, cey);		
-   }
-
-	return clip_mode;
-}
-
 void SetCull(u32 CulliMode)
 {
 	if (CullMode[CulliMode] == GL_NONE)
@@ -151,19 +97,21 @@ static void SetTextureRepeatMode(GLuint dir, u32 clamp, u32 mirror)
 		glcache.TexParameteri(GL_TEXTURE_2D, dir, mirror ? GL_MIRRORED_REPEAT : GL_REPEAT);
 }
 
+static void SetBaseClipping()
+{
+	if (ShaderUniforms.base_clipping.enabled)
+	{
+		glcache.Enable(GL_SCISSOR_TEST);
+		glcache.Scissor(ShaderUniforms.base_clipping.x, ShaderUniforms.base_clipping.y, ShaderUniforms.base_clipping.width, ShaderUniforms.base_clipping.height);
+	}
+	else
+		glcache.Disable(GL_SCISSOR_TEST);
+}
+
 template <u32 Type, bool SortingEnabled>
 __forceinline static void SetGPState(const PolyParam* gp,u32 cflip=0)
 {
-	// Apparently punch-through polys support blending, or at least some combinations
-	if (Type == ListType_Translucent || Type == ListType_Punch_Through)
-   {
-      glcache.Enable(GL_BLEND);
-      glcache.BlendFunc(SrcBlendGL[gp->tsp.SrcInstr], DstBlendGL[gp->tsp.DstInstr]);
-   }
-   else
-      glcache.Disable(GL_BLEND);
-	
-	if (gp->pcw.Texture && gp->tsp.FilterMode > 1 && Type != ListType_Punch_Through && gp->tcw.MipMapped == 1)
+if (gp->pcw.Texture && gp->tsp.FilterMode > 1 && Type != ListType_Punch_Through && gp->tcw.MipMapped == 1)
 	{
 		ShaderUniforms.trilinear_alpha = 0.25 * (gp->tsp.MipMapD & 0x3);
 		if (gp->tsp.FilterMode == 2)
@@ -173,37 +121,62 @@ __forceinline static void SetGPState(const PolyParam* gp,u32 cflip=0)
 	else
 		ShaderUniforms.trilinear_alpha = 1.f;
 
-   bool color_clamp = gp->tsp.ColorClamp && (pvrrc.fog_clamp_min != 0 || pvrrc.fog_clamp_max != 0xffffffff);
+	bool color_clamp = gp->tsp.ColorClamp && (pvrrc.fog_clamp_min != 0 || pvrrc.fog_clamp_max != 0xffffffff);
+	int fog_ctrl = settings.rend.Fog ? gp->tsp.FogCtrl : 2;
+
+	int clip_rect[4] = {};
+	TileClipping clipmode = GetTileClip(gp->tileclip, ViewportMatrix, clip_rect);
+	bool palette = BaseTextureCacheData::IsGpuHandledPaletted(gp->tsp, gp->tcw);
 
 	CurrentShader = GetProgram(Type == ListType_Punch_Through ? 1 : 0,
-								  SetTileClip(gp->tileclip, -1) + 1,
+								  clipmode == TileClipping::Inside,
 								  gp->pcw.Texture,
 								  gp->tsp.UseAlpha,
 								  gp->tsp.IgnoreTexA,
 								  gp->tsp.ShadInstr,
 								  gp->pcw.Offset,
-								  gp->tsp.FogCtrl,
+								  fog_ctrl,
 								  gp->pcw.Gouraud,
 								  gp->tcw.PixelFmt == PixelBumpMap,
 								  color_clamp,
-								  ShaderUniforms.trilinear_alpha != 1.f);
+								  ShaderUniforms.trilinear_alpha != 1.f,
+								  palette);
 
 	glcache.UseProgram(CurrentShader->program);
 	if (CurrentShader->trilinear_alpha != -1)
 		glUniform1f(CurrentShader->trilinear_alpha, ShaderUniforms.trilinear_alpha);
-   SetTileClip(gp->tileclip, CurrentShader->pp_ClipTest);
+	if (palette)
+	{
+		if (gp->tcw.PixelFmt == PixelPal4)
+			ShaderUniforms.palette_index = gp->tcw.PalSelect << 4;
+		else
+			ShaderUniforms.palette_index = (gp->tcw.PalSelect >> 4) << 8;
+		glUniform1i(CurrentShader->palette_index, ShaderUniforms.palette_index);
+	}
 
-   // This bit controls which pixels are affected
-   // by modvols
-   const u32 stencil = (gp->pcw.Shadow!=0)?0x80:0;
-   glcache.StencilFunc(GL_ALWAYS, stencil, stencil);
+	if (clipmode == TileClipping::Inside)
+		glUniform4f(CurrentShader->pp_ClipTest, clip_rect[0], clip_rect[1], clip_rect[0] + clip_rect[2], clip_rect[1] + clip_rect[3]);
+	if (clipmode == TileClipping::Outside)
+	{
+		glcache.Enable(GL_SCISSOR_TEST);
+		glcache.Scissor(clip_rect[0], clip_rect[1], clip_rect[2], clip_rect[3]);
+	}
+	else
+		SetBaseClipping();
 
-   glcache.BindTexture(GL_TEXTURE_2D, gp->texid == -1 ? 0 : (GLuint)gp->texid);
-   SetTextureRepeatMode(GL_TEXTURE_WRAP_S, gp->tsp.ClampU, gp->tsp.FlipU);
-   SetTextureRepeatMode(GL_TEXTURE_WRAP_T, gp->tsp.ClampV, gp->tsp.FlipV);
+	//This bit control which pixels are affected
+	//by modvols
+	const u32 stencil=(gp->pcw.Shadow!=0)?0x80:0x0;
 
-   //set texture filter mode
-	if (gp->tsp.FilterMode == 0)
+	glcache.StencilFunc(GL_ALWAYS,stencil,stencil);
+
+	glcache.BindTexture(GL_TEXTURE_2D, gp->texid == (u64)-1 ? 0 : (GLuint)gp->texid);
+
+	SetTextureRepeatMode(GL_TEXTURE_WRAP_S, gp->tsp.ClampU, gp->tsp.FlipU);
+	SetTextureRepeatMode(GL_TEXTURE_WRAP_T, gp->tsp.ClampV, gp->tsp.FlipV);
+
+	//set texture filter mode
+	if (gp->tsp.FilterMode == 0 || palette)
 	{
 		//disable filtering, mipmaps
 		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -214,40 +187,45 @@ __forceinline static void SetGPState(const PolyParam* gp,u32 cflip=0)
 		//bilinear filtering
 		//PowerVR supports also trilinear via two passes, but we ignore that for now
 		bool mipmapped = gp->tcw.MipMapped != 0 && gp->tcw.ScanOrder == 0 && settings.rend.UseMipmaps;
-		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, mipmapped ? GL_LINEAR_MIPMAP_NEAREST : GL_LINEAR);
 		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-#ifdef GL_TEXTURE_LOD_BIAS
-		if (!gl.is_gles && gl.gl_major >= 3 && mipmapped)
-			glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, D_Adjust_LoD_Bias[gp->tsp.MipMapD]);
-#endif
 	}
 
-   //set cull mode !
-   //cflip is required when exploding triangles for triangle sorting
-   //gcflip is global clip flip, needed for when rendering to texture due to mirrored Y direction
-   SetCull(gp->isp.CullMode ^ cflip ^ gcflip);
+	// Apparently punch-through polys support blending, or at least some combinations
+	if (Type == ListType_Translucent || Type == ListType_Punch_Through)
+	{
+		glcache.Enable(GL_BLEND);
+		glcache.BlendFunc(SrcBlendGL[gp->tsp.SrcInstr], DstBlendGL[gp->tsp.DstInstr]);
+	}
+	else
+		glcache.Disable(GL_BLEND);
 
-   /* Set Z mode, only if required */
-   if (Type == ListType_Punch_Through || (Type == ListType_Translucent && SortingEnabled))
-   {
-      glcache.DepthFunc(GL_GEQUAL);
-   }
-   else
-   {
-      glcache.DepthFunc(Zfunction[gp->isp.DepthMode]);
-   }
+	//set cull mode !
+	//cflip is required when exploding triangles for triangle sorting
+	//gcflip is global clip flip, needed for when rendering to texture due to mirrored Y direction
+	SetCull(gp->isp.CullMode ^ cflip ^ gcflip);
 
-   if (SortingEnabled && settings.pvr.Emulation.AlphaSortMode == 0)
-      glcache.DepthMask(GL_FALSE);
-   else
-   {
-		// Z Write Disable seems to be ignored for punch-through polys
+	//set Z mode, only if required
+	if (Type == ListType_Punch_Through || (Type == ListType_Translucent && SortingEnabled))
+	{
+		glcache.DepthFunc(GL_GEQUAL);
+	}
+	else
+	{
+		glcache.DepthFunc(Zfunction[gp->isp.DepthMode]);
+	}
+
+	if (SortingEnabled && settings.pvr.Emulation.AlphaSortMode == 0)
+		glcache.DepthMask(GL_FALSE);
+	else
+	{
+		// Z Write Disable seems to be ignored for punch-through.
 		// Fixes Worms World Party, Bust-a-Move 4 and Re-Volt
-   	if (Type == ListType_Punch_Through)
-   		glcache.DepthMask(GL_TRUE);
-   	else
-   		glcache.DepthMask(!gp->isp.ZWriteDis);
-   }
+		if (Type == ListType_Punch_Through)
+			glcache.DepthMask(GL_TRUE);
+		else
+			glcache.DepthMask(!gp->isp.ZWriteDis);
+	}
 }
 
 template <u32 Type, bool SortingEnabled>
@@ -430,16 +408,17 @@ void DrawStrips(void)
    vertex_buffer_unmap();
 }
 
-void DrawFramebuffer(float w, float h)
+static void DrawQuad(GLuint texId, float x, float y, float w, float h, float u0, float v0, float u1, float v1)
 {
 	struct Vertex vertices[] = {
-		{ 0, h, 0.1, { 255, 255, 255, 255 }, { 0, 0, 0, 0 }, 0, 1 },
-		{ 0, 0, 0.1, { 255, 255, 255, 255 }, { 0, 0, 0, 0 }, 0, 0 },
-		{ w, h, 0.1, { 255, 255, 255, 255 }, { 0, 0, 0, 0 }, 1, 1 },
-		{ w, 0, 0.1, { 255, 255, 255, 255 }, { 0, 0, 0, 0 }, 1, 0 },
+		{ x,     y + h, 0.1, { 255, 255, 255, 255 }, { 0, 0, 0, 0 }, u0, v1 },
+		{ x,     y,     0.1, { 255, 255, 255, 255 }, { 0, 0, 0, 0 }, u0, v0 },
+		{ x + w, y + h, 0.1, { 255, 255, 255, 255 }, { 0, 0, 0, 0 }, u1, v1 },
+		{ x + w, y,     0.1, { 255, 255, 255, 255 }, { 0, 0, 0, 0 }, u1, v0 },
 	};
 	GLushort indices[] = { 0, 1, 2, 1, 3 };
- 	glcache.Disable(GL_SCISSOR_TEST);
+
+	glcache.Disable(GL_SCISSOR_TEST);
 	glcache.Disable(GL_DEPTH_TEST);
 	glcache.Disable(GL_STENCIL_TEST);
 	glcache.Disable(GL_CULL_FACE);
@@ -447,11 +426,11 @@ void DrawFramebuffer(float w, float h)
 
 	ShaderUniforms.trilinear_alpha = 1.0;
 
- 	PipelineShader *shader = GetProgram(0, 1, 1, 0, 1, 0, 0, 2, false, false, false, false);
+	PipelineShader *shader = GetProgram(0, false, 1, 0, 1, 0, 0, 2, false, false, false, false, false);
 	glcache.UseProgram(shader->program);
 
- 	glActiveTexture(GL_TEXTURE0);
-	glcache.BindTexture(GL_TEXTURE_2D, fbTextureId);
+	glActiveTexture(GL_TEXTURE0);
+	glcache.BindTexture(GL_TEXTURE_2D, texId);
 
 	gVertexBuffer += vtx_incr;
 	gIndices += idx_incr;
@@ -461,6 +440,11 @@ void DrawFramebuffer(float w, float h)
 	idx_incr = sizeof(indices) / sizeof(uint16_t);
 	SetupMainVBO();
 	vglDrawObjects(GL_TRIANGLE_STRIP, 5, GL_FALSE);
+}
+
+void DrawFramebuffer()
+{
+	DrawQuad(fbTextureId, 0, 0, 640.f, 480.f, 0, 0, 1, 1);
 	glcache.DeleteTextures(1, &fbTextureId);
 	fbTextureId = 0;
 }
@@ -575,7 +559,7 @@ void DrawVmuTexture(u8 vmu_screen_number, bool draw_additional_primitives)
 	glcache.Enable(GL_BLEND);
 	glcache.BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	PipelineShader *shader = GetProgram(0, 1, 1, 1, 0, 0, 0, 2, false, false, false, false);
+	PipelineShader *shader = GetProgram(0, 1, 1, 1, 0, 0, 0, 2, false, false, false, false, false);
 	glcache.UseProgram(shader->program);
 
 	{
@@ -673,7 +657,7 @@ void DrawGunCrosshair(u8 port, bool draw_additional_primitives)
 	glcache.Enable(GL_BLEND);
 	glcache.BlendFunc(GL_SRC_ALPHA, GL_ONE);
 
-	PipelineShader *shader = GetProgram(0, 1, 1, 1, 0, 0, 0, 2, false, false, false, false);
+	PipelineShader *shader = GetProgram(0, 1, 1, 1, 0, 0, 0, 2, false, false, false, false, false);
 	glcache.UseProgram(shader->program);
 
 	{

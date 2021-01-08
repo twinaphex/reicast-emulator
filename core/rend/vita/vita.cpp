@@ -41,12 +41,11 @@ float scale_x, scale_y;
 //Fragment and vertex shaders code
 
 static const char* VertexShaderSource = R"(void main(
-	float3 in_pos,
+	float4 in_pos,
 	fixed4 in_base,
 	fixed4 in_offs,
 	half2 in_uv,
-	uniform float4 scale,
-	uniform float extra_depth_scale,
+	uniform float4x4 normal_matrix,
 	fixed4 out vtx_base : COLOR0,
 	fixed4 out vtx_offs : COLOR1,
 	half2 out vtx_uv : TEXCOORD0,
@@ -55,19 +54,18 @@ static const char* VertexShaderSource = R"(void main(
 	vtx_base=in_base;
 	vtx_offs=in_offs;
 	vtx_uv=in_uv;
-	vpos.xyz = in_pos;
+	vpos = normal_matrix * in_pos;
 	
-	vpos.w = extra_depth_scale / vpos.z;
+	vpos.w = 1.0 / vpos.z;
 	vpos.z = vpos.w; 
 
-	vpos.xy = vpos.xy * scale.xy - scale.zw; 
 	vpos.xy *= vpos.w; 
 }
 )";
 
 const char* PixelPipelineShader =
 R"(#define cp_AlphaTest %d
-#define pp_ClipTestMode %d
+#define pp_ClipInside %d
 #define pp_UseAlpha %d
 #define pp_Texture %d
 #define pp_IgnoreTexA %d
@@ -77,6 +75,8 @@ R"(#define cp_AlphaTest %d
 #define pp_BumpMap %d
 #define FogClamping %d
 #define pp_TriLinear %d
+#define pp_Palette %d
+
 #define PI 3.1415926
 
 fixed fog_mode2(float w, float density, sampler2D table)
@@ -110,21 +110,17 @@ void main(
 	uniform float sp_FOG_DENSITY,
 	uniform sampler2D tex : TEXUNIT0,
 	uniform sampler2D fog_table : TEXUNIT1,
+	uniform sampler2D palette : TEXUNIT2,
 	uniform half trilinear_alpha,
 	uniform half4 fog_clamp_min,
 	uniform half4 fog_clamp_max,
+	uniform int palette_index,
 	float4 out frag_clr : COLOR,
 	float out frag_depth : DEPTH
 	)
 {
-	// Clip outside the box
-	#if pp_ClipTestMode == 1
-	if (coords.x < pp_ClipTest.x || coords.x > pp_ClipTest.z
-			|| coords.y < pp_ClipTest.y || coords.y > pp_ClipTest.w)
-		discard;
-	#endif
 	// Clip inside the box
-	#if pp_ClipTestMode==-1
+	#if pp_ClipInside==-1
 	if (coords.x >= pp_ClipTest.x && coords.x <= pp_ClipTest.z
 			&& coords.y >= pp_ClipTest.y && coords.y <= pp_ClipTest.w)
 		discard;
@@ -138,7 +134,15 @@ void main(
 	color = fixed4(sp_FOG_COL_RAM.rgb , fog_mode2(coords.w, sp_FOG_DENSITY, fog_table));
 	#endif
 	#if pp_Texture==1
-	fixed4 texcol=tex2D(tex, vtx_uv);
+	
+		
+		#if pp_Palette == 0
+	fixed4 texcol = tex2D(tex, vtx_uv);
+		#else
+	int color_idx = int(floor(tex2D(tex, vtx_uv).a * 255.0 + 0.5)) + palette_index;
+	float2 c = float2(mod(float(color_idx), 32.0) / 31.0, float(color_idx / 32) / 31.0);
+	fixed4 texcol = tex2D(palette, c);
+		#endif
 		
 		#if pp_BumpMap == 1
 	float s = PI / 2.0 * (texcol.a * 15.0 * 16.0 + texcol.r * 15.0) / 255.0;
@@ -201,10 +205,13 @@ void main(
 int screen_width  = 640;
 int screen_height = 480;
 GLuint fogTextureId;
+GLuint paletteTextureId;
+
+glm::mat4 ViewportMatrix;
 
 PipelineShader *GetProgram(
       u32 cp_AlphaTest,
-      u32 pp_ClipTestMode,
+      u32 pp_InsideClipping,
       u32 pp_Texture,
       u32 pp_UseAlpha,
       u32 pp_IgnoreTexA,
@@ -214,11 +221,12 @@ PipelineShader *GetProgram(
       bool pp_Gouraud,
       bool pp_BumpMap,
       bool fog_clamping,
-      bool trilinear)
+      bool trilinear,
+	  bool palette)
 {
 	u32 rv=0;
 
-	rv|=pp_ClipTestMode;
+	rv|=pp_InsideClipping;
 	rv<<=1; rv|=cp_AlphaTest;
 	rv<<=1; rv|=pp_Texture;
 	rv<<=1; rv|=pp_UseAlpha;
@@ -226,28 +234,30 @@ PipelineShader *GetProgram(
 	rv<<=2; rv|=pp_ShadInstr;
 	rv<<=1; rv|=pp_Offset;
 	rv<<=2; rv|=pp_FogCtrl;
-   rv<<=1; rv|=pp_Gouraud;
-   rv<<=1; rv|=pp_BumpMap;
-   rv<<=1; rv|=fog_clamping;
-   rv<<=1; rv|=trilinear;
+	rv<<=1; rv|=pp_Gouraud;
+	rv<<=1; rv|=pp_BumpMap;
+	rv<<=1; rv|=fog_clamping;
+	rv<<=1; rv|=trilinear;
+	rv<<=1; rv|=palette;
 
-   PipelineShader *shader = &gl.shaders[rv];
-   if (shader->program == 0)
-   {
-   	shader->cp_AlphaTest = cp_AlphaTest;
-   	shader->pp_ClipTestMode = pp_ClipTestMode - 1;
-   	shader->pp_Texture = pp_Texture;
-   	shader->pp_UseAlpha = pp_UseAlpha;
-   	shader->pp_IgnoreTexA = pp_IgnoreTexA;
-   	shader->pp_ShadInstr = pp_ShadInstr;
-   	shader->pp_Offset = pp_Offset;
-   	shader->pp_FogCtrl = pp_FogCtrl;
-   	shader->pp_Gouraud = pp_Gouraud;
-   	shader->pp_BumpMap = pp_BumpMap;
-   	shader->fog_clamping = fog_clamping;
-   	shader->trilinear = trilinear;
-   	CompilePipelineShader(shader);
-   }
+	PipelineShader *shader = &gl.shaders[rv];
+	if (shader->program == 0)
+	{
+		shader->cp_AlphaTest = cp_AlphaTest;
+		shader->pp_InsideClipping = pp_InsideClipping;
+		shader->pp_Texture = pp_Texture;
+		shader->pp_UseAlpha = pp_UseAlpha;
+		shader->pp_IgnoreTexA = pp_IgnoreTexA;
+		shader->pp_ShadInstr = pp_ShadInstr;
+		shader->pp_Offset = pp_Offset;
+		shader->pp_FogCtrl = pp_FogCtrl;
+		shader->pp_Gouraud = pp_Gouraud;
+		shader->pp_BumpMap = pp_BumpMap;
+		shader->fog_clamping = fog_clamping;
+		shader->trilinear = trilinear;
+		shader->palette = palette;
+		CompilePipelineShader(shader);
+	}
     glcache.UseProgram(shader->program);
     ShaderUniforms.Set(shader);
 
@@ -314,26 +324,19 @@ bool CompilePipelineShader(PipelineShader *s)
 	char pshader[8192];
 
    sprintf(pshader,PixelPipelineShader,
-                s->cp_AlphaTest,s->pp_ClipTestMode,s->pp_UseAlpha,
-                s->pp_Texture,s->pp_IgnoreTexA,s->pp_ShadInstr,s->pp_Offset,s->pp_FogCtrl, s->pp_BumpMap, s->fog_clamping, s->trilinear);
+                s->cp_AlphaTest,s->pp_InsideClipping,s->pp_UseAlpha,
+                s->pp_Texture,s->pp_IgnoreTexA,s->pp_ShadInstr,
+				s->pp_Offset,s->pp_FogCtrl, s->pp_BumpMap, s->fog_clamping, s->trilinear, s->palette);
 
 	s->program            = gl_CompileAndLink(vshader, pshader);
 
 	//get the uniform locations
-	s->scale = glGetUniformLocation(s->program, "scale");
-	s->depth_scale = -1;
-
-	s->extra_depth_scale = glGetUniformLocation(s->program, "extra_depth_scale");
 	
-	if (s->pp_ClipTestMode==1 || s->pp_ClipTestMode==-1)
-		s->pp_ClipTest = glGetUniformLocation(s->program, "pp_ClipTest");
-	else
-		s->pp_ClipTest = -1;
+	s->pp_ClipTest = glGetUniformLocation(s->program, "pp_ClipTest");
 	
-	if (s->cp_AlphaTest==1 && s->pp_Texture==1)
-		s->cp_AlphaTestValue  = glGetUniformLocation(s->program, "cp_AlphaTestValue");
-	else
-		s->cp_AlphaTestValue = -1;
+	s->sp_FOG_DENSITY   = glGetUniformLocation(s->program, "sp_FOG_DENSITY");
+	
+	s->cp_AlphaTestValue= glGetUniformLocation(s->program, "cp_AlphaTestValue");
 
 	//FOG_COL_RAM,FOG_COL_VERT,FOG_DENSITY;
 	if (s->pp_FogCtrl==1 && s->pp_Texture==1)
@@ -348,6 +351,8 @@ bool CompilePipelineShader(PipelineShader *s)
 		s->sp_FOG_COL_RAM = -1;
 		s->sp_FOG_DENSITY = -1;
 	}
+	
+	s->palette_index = glGetUniformLocation(s->program, "palette_index");
 	
 	if (s->trilinear)
 		s->trilinear_alpha = glGetUniformLocation(s->program, "trilinear_alpha");
@@ -364,10 +369,12 @@ bool CompilePipelineShader(PipelineShader *s)
 		s->fog_clamp_min = -1;
 		s->fog_clamp_max = -1;
 	}
+	
+	s->normal_matrix = glGetUniformLocation(s->program, "normal_matrix");
 
-   ShaderUniforms.Set(s);
+	ShaderUniforms.Set(s);
 
-   return GL_TRUE;
+	return GL_TRUE;
 }
 
 /*
@@ -465,6 +472,26 @@ void UpdateFogTexture(u8 *fog_table, GLenum texture_slot, GLint fog_image_format
 	glActiveTexture(GL_TEXTURE0);
 }
 
+void UpdatePaletteTexture(GLenum texture_slot)
+{
+	glActiveTexture(texture_slot);
+	if (paletteTextureId == 0)
+	{
+		paletteTextureId = glcache.GenTexture();
+		glcache.BindTexture(GL_TEXTURE_2D, paletteTextureId);
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glcache.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	}
+	else
+		glcache.BindTexture(GL_TEXTURE_2D, paletteTextureId);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 32, 32, 0, GL_RGBA, GL_UNSIGNED_BYTE, palette32_ram);
+
+	glActiveTexture(GL_TEXTURE0);
+}
+
 void DrawVmuTexture(u8 vmu_screen_number, bool draw_additional_primitives);
 void DrawGunCrosshair(u8 port, bool draw_additional_primitives);
 
@@ -498,8 +525,6 @@ static bool RenderFrame(void)
 
 	bool is_rtt=pvrrc.isRTT;
 
-	//if (FrameCount&7) return;
-
 	float vtx_min_fZ=0.f;   //pvrrc.fZ_min;
 	float vtx_max_fZ=pvrrc.fZ_max;
 
@@ -513,85 +538,19 @@ static bool RenderFrame(void)
 	vtx_min_fZ*=0.98f;
 	vtx_max_fZ*=1.001f;
 
-	//these should be adjusted based on the current PVR scaling etc params
-	float dc_width=640;
-	float dc_height=480;
+	TransformMatrix<true> matrices(pvrrc);
+	ShaderUniforms.normal_mat = matrices.GetNormalMatrix();
+	const glm::mat4& scissor_mat = matrices.GetScissorMatrix();
+	ViewportMatrix = matrices.GetViewportMatrix();
 
 	if (!is_rtt)
-	{
 		gcflip=0;
-	}
 	else
-	{
 		gcflip=1;
 
-		//For some reason this produces wrong results
-		//so for now its hacked based like on the d3d code
-		/*
-		u32 pvr_stride=(FB_W_LINESTRIDE.stride)*8;
-		*/
-
-		dc_width = pvrrc.fb_X_CLIP.max - pvrrc.fb_X_CLIP.min + 1;
-		dc_height = pvrrc.fb_Y_CLIP.max - pvrrc.fb_Y_CLIP.min + 1;
-	}
-
-	scale_x = 1;
-	scale_y = 1;
-
-	float scissoring_scale_x = 1;
-
-   if (!is_rtt && !pvrrc.isRenderFramebuffer)
-   {
-      scale_x=fb_scale_x;
-      scale_y=fb_scale_y;
-		if (SCALER_CTL.interlace == 0 && SCALER_CTL.vscalefactor > 0x400)
-			scale_y *= roundf((float)SCALER_CTL.vscalefactor / 0x400);
-
-      //work out scaling parameters !
-      //Pixel doubling is on VO, so it does not affect any pixel operations
-      //A second scaling is used here for scissoring
-      if (VO_CONTROL.pixel_double)
-      {
-         scissoring_scale_x  = 0.5f;
-         scale_x            *= 0.5f;
-      }
-
-      if (SCALER_CTL.hscale)
-      {
-         scissoring_scale_x /= 2;
-         scale_x*=2;
-      }
-   }
-
-	dc_width  *= scale_x;
-	dc_height *= scale_y;
-
-	/*
-		Handle Dc to screen scaling
-	*/
-	float dc2s_scale_h = is_rtt ? (screen_width / dc_width) : (screen_height/480.0);
-	float ds2s_offs_x  = is_rtt ? 0 : ((screen_width-dc2s_scale_h*640)/2);
-
-	//-1 -> too much to left
-	ShaderUniforms.scale_coefs[0]=2.0f/(screen_width/dc2s_scale_h*scale_x);
-	ShaderUniforms.scale_coefs[1]= (is_rtt?2:-2) / dc_height;
-   // FIXME CT2 needs 480 here instead of dc_height=512
-	ShaderUniforms.scale_coefs[2]=1-2*ds2s_offs_x/(screen_width);
-	ShaderUniforms.scale_coefs[3]=(is_rtt?1:-1);
-
-	ShaderUniforms.depth_coefs[0]=2/(vtx_max_fZ-vtx_min_fZ);
-	ShaderUniforms.depth_coefs[1]=-vtx_min_fZ-1;
-	ShaderUniforms.depth_coefs[2]=0;
-	ShaderUniforms.depth_coefs[3]=0;
-
-	ShaderUniforms.extra_depth_scale = settings.rend.ExtraDepthScale;
-
-	DEBUG_LOG(RENDERER, "scale: %f, %f, %f, %f", ShaderUniforms.scale_coefs[0], ShaderUniforms.scale_coefs[1], ShaderUniforms.scale_coefs[2], ShaderUniforms.scale_coefs[3]);
-
-
 	//VERT and RAM fog color constants
-	u8* fog_colvert_bgra=(u8*)&FOG_COL_VERT;
-	u8* fog_colram_bgra=(u8*)&FOG_COL_RAM;
+	u8* fog_colvert_bgra = (u8*)&FOG_COL_VERT;
+	u8* fog_colram_bgra = (u8*)&FOG_COL_RAM;
 	ShaderUniforms.ps_FOG_COL_VERT[0] = fog_colvert_bgra[2] / 255.0f;
 	ShaderUniforms.ps_FOG_COL_VERT[1] = fog_colvert_bgra[1] / 255.0f;
 	ShaderUniforms.ps_FOG_COL_VERT[2] = fog_colvert_bgra[0] / 255.0f;
@@ -600,33 +559,43 @@ static bool RenderFrame(void)
 	ShaderUniforms.ps_FOG_COL_RAM[1] = fog_colram_bgra[1] / 255.0f;
 	ShaderUniforms.ps_FOG_COL_RAM[2] = fog_colram_bgra[0] / 255.0f;
 
-
 	//Fog density constant
-	u8* fog_density=(u8*)&FOG_DENSITY;
+	u8* fog_density = (u8*)&FOG_DENSITY;
 	float fog_den_mant = fog_density[1] / 128.0f;  //bit 7 -> x. bit, so [6:0] -> fraction -> /128
 	s32 fog_den_exp = (s8)fog_density[0];
-	ShaderUniforms.fog_den_float = fog_den_mant * powf(2.0f, fog_den_exp) * settings.rend.ExtraDepthScale;
+	ShaderUniforms.fog_den_float = fog_den_mant * powf(2.0f, fog_den_exp);
 
 	ShaderUniforms.fog_clamp_min[0] = ((pvrrc.fog_clamp_min >> 16) & 0xFF) / 255.0f;
 	ShaderUniforms.fog_clamp_min[1] = ((pvrrc.fog_clamp_min >> 8) & 0xFF) / 255.0f;
 	ShaderUniforms.fog_clamp_min[2] = ((pvrrc.fog_clamp_min >> 0) & 0xFF) / 255.0f;
 	ShaderUniforms.fog_clamp_min[3] = ((pvrrc.fog_clamp_min >> 24) & 0xFF) / 255.0f;
-	
+
 	ShaderUniforms.fog_clamp_max[0] = ((pvrrc.fog_clamp_max >> 16) & 0xFF) / 255.0f;
 	ShaderUniforms.fog_clamp_max[1] = ((pvrrc.fog_clamp_max >> 8) & 0xFF) / 255.0f;
 	ShaderUniforms.fog_clamp_max[2] = ((pvrrc.fog_clamp_max >> 0) & 0xFF) / 255.0f;
 	ShaderUniforms.fog_clamp_max[3] = ((pvrrc.fog_clamp_max >> 24) & 0xFF) / 255.0f;
 
 
-	if (fog_needs_update)
+	if (fog_needs_update && settings.rend.Fog)
 	{
 		fog_needs_update=false;
-      UpdateFogTexture((u8 *)FOG_TABLE, GL_TEXTURE1, gl.fog_image_format);
+		UpdateFogTexture((u8 *)FOG_TABLE, GL_TEXTURE1, gl.fog_image_format);
+	}
+	if (palette_updated)
+	{
+		UpdatePaletteTexture(GL_TEXTURE2);
+		palette_updated = false;
 	}
 
 	ShaderUniforms.PT_ALPHA=(PT_ALPHA_REF&0xFF)/255.0f;
+	
+	for (const auto& it : gl.shaders)
+	{
+		glcache.UseProgram(it.second.program);
+		ShaderUniforms.Set(&it.second);
+	}
 
-   bool wide_screen_on = true;
+	bool wide_screen_on = settings.rend.WideScreen && !matrices.IsClipped();
 
    // Color is cleared by the background plane
 
@@ -647,63 +616,74 @@ static bool RenderFrame(void)
 	  
       upload_vertex_indices();
 
-      //not all scaling affects pixel operations, scale to adjust for that
-      scale_x *= scissoring_scale_x;
-
-#if 0
-      //handy to debug really stupid render-not-working issues ...
-      DEBUG_LOG(RENDERER, "SS: %dx%d", screen_width, screen_height);
-      DEBUG_LOG(RENDERER, "SCI: %d, %f", pvrrc.fb_X_CLIP.max, dc2s_scale_h);
-      DEBUG_LOG(RENDERER, "SCI: %f, %f, %f, %f", offs_x+pvrrc.fb_X_CLIP.min/scale_x,(pvrrc.fb_Y_CLIP.min/scale_y)*dc2s_scale_h,(pvrrc.fb_X_CLIP.max-pvrrc.fb_X_CLIP.min+1)/scale_x*dc2s_scale_h,(pvrrc.fb_Y_CLIP.max-pvrrc.fb_Y_CLIP.min+1)/scale_y*dc2s_scale_h);
-#endif
-
       if (!wide_screen_on)
       {
-         float width  = (pvrrc.fb_X_CLIP.max - pvrrc.fb_X_CLIP.min + 1) / scale_x;
-         float height = (pvrrc.fb_Y_CLIP.max - pvrrc.fb_Y_CLIP.min + 1) / scale_y;
-         float min_x  = pvrrc.fb_X_CLIP.min / scale_x;
-         float min_y  = pvrrc.fb_Y_CLIP.min / scale_y;
+         float width;
+         float height;
+         float min_x;
+         float min_y;
          if (!is_rtt)
          {
-				if (SCALER_CTL.interlace && SCALER_CTL.vscalefactor > 0x400)
-				{
-					// Clipping is done after scaling/filtering so account for that if enabled
-					height *= (float)SCALER_CTL.vscalefactor / 0x400;
-					min_y *= (float)SCALER_CTL.vscalefactor / 0x400;
-				}
-            // Add x offset for aspect ratio > 4/3
-            min_x   = min_x * dc2s_scale_h + ds2s_offs_x;
-            // Invert y coordinates when rendering to screen
-            min_y   = screen_height - (min_y + height) * dc2s_scale_h;
-            width  *= dc2s_scale_h;
-            height *= dc2s_scale_h;
+			glm::vec4 clip_min(pvrrc.fb_X_CLIP.min, pvrrc.fb_Y_CLIP.min, 0, 1);
+			glm::vec4 clip_dim(pvrrc.fb_X_CLIP.max - pvrrc.fb_X_CLIP.min + 1,
+								   pvrrc.fb_Y_CLIP.max - pvrrc.fb_Y_CLIP.min + 1, 0, 0);
+			clip_min = scissor_mat * clip_min;
+			clip_dim = scissor_mat * clip_dim;
 
-			if (ds2s_offs_x > 0)
+			min_x = clip_min[0];
+			min_y = clip_min[1];
+			width = clip_dim[0];
+			height = clip_dim[1];
+			if (width < 0)
 			{
-			   float rounded_offs_x = ds2s_offs_x + 0.5f;
+				min_x += width;
+				width = -width;
+			}
+			if (height < 0)
+			{
+				min_y += height;
+				height = -height;
+			}
 
-			   glcache.ClearColor(0.f, 0.f, 0.f, 0.f);
-			   glcache.Enable(GL_SCISSOR_TEST);
-			   glScissor(0, 0, rounded_offs_x, screen_height);
-			   glClear(GL_COLOR_BUFFER_BIT);
-			   glScissor(screen_width - rounded_offs_x, 0, rounded_offs_x, screen_height);
-			   glClear(GL_COLOR_BUFFER_BIT);
+			if (matrices.GetSidebarWidth() > 0)
+			{
+				float rounded_offs_x = matrices.GetSidebarWidth() + 0.5f;
+
+				glcache.ClearColor(0.f, 0.f, 0.f, 0.f);
+				glcache.Enable(GL_SCISSOR_TEST);
+				glcache.Scissor(0, 0, rounded_offs_x, screen_height);
+				glClear(GL_COLOR_BUFFER_BIT);
+				glcache.Scissor(screen_width - rounded_offs_x, 0, rounded_offs_x, screen_height);
+				glClear(GL_COLOR_BUFFER_BIT);
+				}
+         }
+         else
+         {
+            width = pvrrc.fb_X_CLIP.max - pvrrc.fb_X_CLIP.min + 1;
+			height = pvrrc.fb_Y_CLIP.max - pvrrc.fb_Y_CLIP.min + 1;
+			min_x = pvrrc.fb_X_CLIP.min;
+			min_y = pvrrc.fb_Y_CLIP.min;
+			if (settings.rend.RenderToTextureUpscale > 1 && !settings.rend.RenderToTextureBuffer)
+			{
+				min_x *= settings.rend.RenderToTextureUpscale;
+				min_y *= settings.rend.RenderToTextureUpscale;
+				width *= settings.rend.RenderToTextureUpscale;
+				height *= settings.rend.RenderToTextureUpscale;
 			}
          }
-         else if (settings.rend.RenderToTextureUpscale > 1 && !settings.rend.RenderToTextureBuffer)
-         {
-            min_x *= settings.rend.RenderToTextureUpscale;
-            min_y *= settings.rend.RenderToTextureUpscale;
-            width *= settings.rend.RenderToTextureUpscale;
-            height *= settings.rend.RenderToTextureUpscale;
-         }
-
-         glScissor((GLint)lroundf(min_x), (GLint)lroundf(min_y), (GLsizei)lroundf(width), (GLsizei)lroundf(height));
+		
+         ShaderUniforms.base_clipping.enabled = true;
+         ShaderUniforms.base_clipping.x = (int)lroundf(min_x);
+         ShaderUniforms.base_clipping.y = (int)lroundf(min_y);
+         ShaderUniforms.base_clipping.width = (int)lroundf(width);
+         ShaderUniforms.base_clipping.height = (int)lroundf(height);
+         glcache.Scissor(ShaderUniforms.base_clipping.x, ShaderUniforms.base_clipping.y, ShaderUniforms.base_clipping.width, ShaderUniforms.base_clipping.height);
          glcache.Enable(GL_SCISSOR_TEST);
       }
-
-      //restore scale_x
-      scale_x /= scissoring_scale_x;
+	  else
+	  {
+		ShaderUniforms.base_clipping.enabled = false;
+	  }
 
       DrawStrips();
    }
@@ -711,7 +691,7 @@ static bool RenderFrame(void)
    {
       glcache.ClearColor(0.f, 0.f, 0.f, 0.f);
       glClear(GL_COLOR_BUFFER_BIT);
-      DrawFramebuffer(dc_width, dc_height);
+      DrawFramebuffer();
    }
 
    if (!is_rtt)
