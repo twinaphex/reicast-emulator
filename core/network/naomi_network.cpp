@@ -32,7 +32,7 @@ sock_t NaomiNetwork::createAndBind(int protocol)
 		return INVALID_SOCKET;
 	}
 	int option = 1;
-	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&option, sizeof(option));
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
 
 	struct sockaddr_in serveraddr;
 	memset(&serveraddr, 0, sizeof(serveraddr));
@@ -53,14 +53,6 @@ sock_t NaomiNetwork::createAndBind(int protocol)
 
 bool NaomiNetwork::init()
 {
-#ifdef _WIN32
-	WSADATA wsaData;
-	if (WSAStartup(MAKEWORD(2, 0), &wsaData) != 0)
-	{
-		ERROR_LOG(NETWORK, "WSAStartup failed. errno=%d", get_last_error());
-		return false;
-	}
-#endif
 	if (settings.network.ActAsServer)
 		return createBeaconSocket() && createServerSocket();
 	else
@@ -130,7 +122,7 @@ bool NaomiNetwork::findServer()
 
     // Allow broadcast packets to be sent
     int broadcast = 1;
-    if (setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, (const char *)&broadcast, sizeof(broadcast)) == -1)
+    if (setsockopt(sockfd, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) == -1)
     {
         ERROR_LOG(NETWORK, "setsockopt(SO_BROADCAST) failed. errno=%d", get_last_error());
         closesocket(sockfd);
@@ -158,7 +150,9 @@ bool NaomiNetwork::findServer()
         if (sendto(sockfd, "flycast", 6, 0, (struct sockaddr *)&addr, sizeof addr) == -1)
         {
             WARN_LOG(NETWORK, "Send datagram failed. errno=%d", get_last_error());
+#ifndef VITA
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
+#endif
             continue;
         }
 
@@ -242,12 +236,16 @@ bool NaomiNetwork::startNetwork()
 			else
 			{
 				NOTICE_LOG(NETWORK, "Slave connection accepted");
+#ifndef VITA
 				std::lock_guard<std::mutex> lock(mutex);
+#endif
 				slaves.push_back(clientSock);
 				if (slaves.size() == 3)
 					break;
 			}
+#ifndef VITA
 			std::this_thread::sleep_for(milliseconds(100));
+#endif
 		}
 		slot_id = 0;
 		slot_count = slaves.size() + 1;
@@ -258,7 +256,7 @@ bool NaomiNetwork::startNetwork()
 			{
 				buf[1] = { (u8)slot_num };
 				slot_num++;
-				::send(socket, (const char *)buf, 2, 0);
+				write(socket, buf, 2);
 				set_non_blocking(socket);
 				set_tcp_nodelay(socket);
 			}
@@ -311,7 +309,9 @@ bool NaomiNetwork::startNetwork()
 				ERROR_LOG(NETWORK, "Socket connect failed");
 				closesocket(client_sock);
 				client_sock = INVALID_SOCKET;
+#ifndef VITA
 				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+#endif
 			}
 			else
 			{
@@ -320,7 +320,7 @@ bool NaomiNetwork::startNetwork()
 #endif
 				set_recv_timeout(client_sock, (int)std::chrono::milliseconds(timeout * 2).count());
 				u8 buf[2];
-				if (::recv(client_sock, (char *)buf, 2, 0) < 2)
+				if (read(client_sock, buf, 2) < 2)
 				{
 					ERROR_LOG(NETWORK, "Connection failed: errno=%d", get_last_error());
 					closesocket(client_sock);
@@ -350,14 +350,14 @@ bool NaomiNetwork::startNetwork()
 
 void NaomiNetwork::pipeSlaves()
 {
-	if (!isMaster() || slot_count < 3)
+	if (isMaster() || slot_count < 3)
 		return;
-	char buf[16384];
+	u8 buf[16384];
 	for (auto it = slaves.begin(); it != slaves.end() - 1; it++)
 	{
-		ssize_t l = ::recv(*it, buf, sizeof(buf), 0);
+		ssize_t l = read(*it, buf, sizeof(buf));
 		if (l > 0)
-			::send(*(it + 1), buf, l, 0);
+			write(*(it + 1), buf, l);
 		// TODO handle errors
 	}
 }
@@ -373,7 +373,7 @@ bool NaomiNetwork::receive(u8 *data, u32 size)
 		return false;
 
 	u16 pktnum;
-	ssize_t l = ::recv(sockfd, (char *)&pktnum, sizeof(pktnum), 0);
+	ssize_t l = read(sockfd, &pktnum, sizeof(pktnum));
 	if (l <= 0)
 	{
 		if (get_last_error() != L_EAGAIN && get_last_error() != L_EWOULDBLOCK)
@@ -393,7 +393,7 @@ bool NaomiNetwork::receive(u8 *data, u32 size)
 	ssize_t received = 0;
 	while (received != size && !network_stopping)
 	{
-		l = ::recv(sockfd, (char*)(data + received), size - received, 0);
+		l = read(sockfd, data + received, size - received);
 		if (l <= 0)
 		{
 			if (get_last_error() != L_EAGAIN && get_last_error() != L_EWOULDBLOCK)
@@ -430,26 +430,20 @@ void NaomiNetwork::send(u8 *data, u32 size)
 		return;
 
 	u16 pktnum = packet_number + 1;
-	if (::send(sockfd, (const char *)&pktnum, sizeof(pktnum), 0) < 2)
+	struct iovec iov[] = { { &pktnum, sizeof(pktnum) }, { data, size } };
+	struct msghdr msg{};
+	msg.msg_iov = iov;
+	msg.msg_iovlen = ARRAY_SIZE(iov);
+	if (sendmsg(sockfd, &msg, 0) < 0)
 	{
 		if (errno != L_EAGAIN && errno != L_EWOULDBLOCK)
 		{
-			WARN_LOG(NETWORK, "send failed. errno=%d", get_last_error());
+			WARN_LOG(NETWORK, "sendmsg failed. errno=%d", get_last_error());
 			if (isMaster())
 			{
 				slaves.front() = -1;
 				closesocket(sockfd);
 			}
-		}
-		return;
-	}
-	if (::send(sockfd, (const char *)data, size, 0) < size)
-	{
-		WARN_LOG(NETWORK, "send failed. errno=%d", get_last_error());
-		if (isMaster())
-		{
-			slaves.front() = -1;
-			closesocket(sockfd);
 		}
 	}
 	else
@@ -464,7 +458,9 @@ void NaomiNetwork::shutdown()
 {
 	network_stopping = true;
 	{
+#ifndef VITA
 		std::lock_guard<std::mutex> lock(mutex);
+#endif
 		for (auto& clientSock : slaves)
 		{
 			closesocket(clientSock);

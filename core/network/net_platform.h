@@ -10,6 +10,9 @@
 // What is this ? Is it needed ?
 #include <switch.h>
 #define SOL_TCP 6 // Shrug
+#elif defined(VITA)
+#include <vitasdk.h>
+#define SOL_TCP 6 // Shrug
 #endif // HAVE_LIBNX
 
 #include <netinet/ip.h>
