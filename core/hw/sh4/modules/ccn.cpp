@@ -81,13 +81,9 @@ void CCN_CCR_write(u32 addr, u32 value)
 	CCN_CCR_type temp;
 	temp.reg_data=value;
 
-	//what is 0xAC13DBF8 from ?
-	if (temp.ICI && curr_pc!=0xAC13DBF8)
-	{
+	if (temp.ICI) {
 		DEBUG_LOG(SH4, "Sh4: i-cache invalidation %08X", curr_pc);
-		// Shikigami No Shiro II sets ICI frequently
-		// No reason to flush the dynarec cache for this
-		//sh4_cpu.ResetCache();
+		//Shikigami No Shiro II uses ICI frequently
 		if (!settings.dynarec.Enable)
 			icache.Invalidate();
 		temp.ICI = 0;

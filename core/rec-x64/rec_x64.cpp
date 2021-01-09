@@ -289,10 +289,10 @@ public:
 
 	void compile(RuntimeBlockInfo* block, bool force_checks, bool reset, bool staging, bool optimise)
    {
+		//printf("X86_64 compiling %08x to %p\n", block->addr, emit_GetCCPtr());
 		current_opid = -1;
-      if (force_checks) {
-			CheckBlock(block);
-		}
+
+		CheckBlock(force_checks, block);
 
 #ifdef _WIN32
 		sub(rsp, 0x28);		// 32-byte shadow space + 8 byte alignment
@@ -1823,8 +1823,8 @@ private:
 		return true;
 	}
 
-	void CheckBlock(RuntimeBlockInfo* block) {
-	   mov(call_regs[0], block->addr);
+	void CheckBlock(bool force_checks, RuntimeBlockInfo* block) {
+		mov(call_regs[0], block->addr);
 
 		// FIXME This test shouldn't be necessary
 		// However the decoder makes various assumptions about the current PC value, which are simply not
@@ -1837,38 +1837,42 @@ private:
 			jne(reinterpret_cast<const void*>(&ngen_blockcheckfail));
 		}
 
-	   s32 sz=block->sh4_code_size;
-	   u32 sa=block->addr;
+		if (!force_checks)
+			return;
 
-	   while (sz > 0)
-	   {
-		  void* ptr = (void*)GetMemPtr(sa, sz > 8 ? 8 : sz);
-		  if (ptr)
-		  {
-			 uintptr_t uintptr = reinterpret_cast<uintptr_t>(ptr);
-			 mov(rax, uintptr);
+		s32 sz=block->sh4_code_size;
+		u32 sa=block->addr;
 
-			 if (sz >= 8 && !(uintptr & 7)) {
-				mov(rdx, *(u64*)ptr);
-				cmp(qword[rax], rdx);
-				sz -= 8;
-				sa += 8;
-			 }
-			 else if (sz >= 4 && !(uintptr & 3)) {
-				mov(edx, *(u32*)ptr);
-				cmp(dword[rax], edx);
-				sz -= 4;
-				sa += 4;
-			 }
-			 else {
-				mov(edx, *(u16*)ptr);
-				cmp(word[rax],dx);
-				sz -= 2;
-				sa += 2;
-			 }
-			 jne(reinterpret_cast<const void*>(&ngen_blockcheckfail));
-		  }
-	   }
+		void* ptr = (void*)GetMemPtr(sa, sz > 8 ? 8 : sz);
+		if (ptr)
+		{
+			while (sz > 0)
+			{
+				uintptr_t uintptr = reinterpret_cast<uintptr_t>(ptr);
+				mov(rax, uintptr);
+
+				if (sz >= 8 && !(uintptr & 7)) {
+					mov(rdx, *(u64*)ptr);
+					cmp(qword[rax], rdx);
+					sz -= 8;
+					sa += 8;
+				}
+				else if (sz >= 4 && !(uintptr & 3)) {
+					mov(edx, *(u32*)ptr);
+					cmp(dword[rax], edx);
+					sz -= 4;
+					sa += 4;
+				}
+				else {
+					mov(edx, *(u16*)ptr);
+					cmp(word[rax],dx);
+					sz -= 2;
+					sa += 2;
+				}
+				jne(reinterpret_cast<const void*>(CC_RX2RW(&ngen_blockcheckfail)));
+				ptr = (void*)GetMemPtr(sa, sz > 8 ? 8 : sz);
+			}
+		}
 	}
 
 	void GenBinaryOp(const shil_opcode &op, X64BinaryOp natop)

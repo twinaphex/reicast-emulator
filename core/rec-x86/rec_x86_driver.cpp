@@ -238,7 +238,6 @@ void DYNACALL PrintBlock(u32 pc)
 
 u32 cvld;
 u32 rdmt[6];
-extern int mips_counter;
 
 void CheckBlock(RuntimeBlockInfo* block,x86_ptr_imm place)
 {
@@ -277,10 +276,6 @@ void ngen_Compile_x86(RuntimeBlockInfo* block,bool force_checks, bool reset, boo
 	x86e->do_realloc=false;
 
 	block->code=(DynarecCodeEntryPtr)emit_GetCCPtr();
-
-#ifdef MIPS_COUNTER
-	x86e->Emit(op_add32, &mips_counter, block->oplist.size());
-#endif
 
 	//run register allocator
 	reg.DoAlloc(block,alloc_regs,xmm_alloc_regs);

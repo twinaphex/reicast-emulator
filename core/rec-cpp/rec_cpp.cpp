@@ -17,9 +17,6 @@
 #include "hw/sh4/dyna/shil_canonical.h"
 
 
-#define MIPS_COUNTER 0
-
-extern int mips_counter;
 extern int cycle_counter;
 
 void ngen_blockcheckfail_CC(u32 pc) {

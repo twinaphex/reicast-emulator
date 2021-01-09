@@ -205,7 +205,6 @@ bool RuntimeBlockInfo::Setup(u32 rpc,fpscr_t rfpu_cfg)
 DynarecCodeEntryPtr rdv_CompilePC(u32 blockcheck_failures)
 {
 	u32 pc=next_pc;
-	//printf("rdv_CompilePC next_pc %p\n", next_pc);
 
 	if (emit_FreeSpace()<16*1024 || pc==0x8c0000e0 || pc==0xac010000 || pc==0xac008300)
 		recSh4_ClearCache();
@@ -228,13 +227,13 @@ DynarecCodeEntryPtr rdv_CompilePC(u32 blockcheck_failures)
 		if (rbi->read_only)
 			INFO_LOG(DYNAREC, "WARNING: temp block %x (%x) is protected!", rbi->vaddr, rbi->addr);
 	}
-		bool do_opts = !rbi->temp_block;
-		rbi->staging_runs=do_opts?100:-100;
-		bool block_check = rbi->read_only ? false : IsOnRam(rbi->addr);
-		ngen_Compile(rbi, block_check, (pc & 0xFFFFFF) == 0x08300 || (pc & 0xFFFFFF) == 0x10000, false, do_opts);
-		verify(rbi->code!=0);
+	bool do_opts = !rbi->temp_block;
+	rbi->staging_runs=do_opts?100:-100;
+	bool block_check = !rbi->read_only;
+	ngen_Compile(rbi, block_check, (pc & 0xFFFFFF) == 0x08300 || (pc & 0xFFFFFF) == 0x10000, false, do_opts);
+	verify(rbi->code!=0);
 
-		bm_AddBlock(rbi);
+	bm_AddBlock(rbi);
 
 	if (emit_ptr != NULL)
 	{
