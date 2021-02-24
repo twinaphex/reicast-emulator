@@ -7,11 +7,12 @@
 */
 
 #include "descrambl.h"
+#include "imgread/common.h"
 #include <algorithm>
 
 #define MAXCHUNK (2048*1024)
 
-unsigned int seed;
+static unsigned int seed;
 
 static void my_srand(unsigned int n)
 {
@@ -44,7 +45,7 @@ static void load_chunk(u8* &src, unsigned char *ptr, unsigned long sz)
 		int x = (my_rand() * i) >> 16;
 
 		/* Swap */
-		swap(idx[i], idx[x]);
+		std::swap(idx[i], idx[x]);
 
 		/* Load resulting slice */
 		memcpy(ptr + 32 * idx[i], src, 32);

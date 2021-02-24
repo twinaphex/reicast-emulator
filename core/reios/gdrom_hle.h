@@ -64,9 +64,10 @@ struct gdrom_hle_state_t
 	u32 multi_callback_arg;
 	bool dma_trans_ended;
 	u64 xfer_end_time;
-
+	
 	bool Serialize(void **data, unsigned int *total_size)
 	{
+#ifdef __LIBRETRO__
 		LIBRETRO_S(last_request_id);
 		LIBRETRO_S(next_request_id);
 		LIBRETRO_S(status);
@@ -82,11 +83,29 @@ struct gdrom_hle_state_t
 		LIBRETRO_S(multi_callback_arg);
 		LIBRETRO_S(dma_trans_ended);
 		LIBRETRO_S(xfer_end_time);
-
+#else
+		REICAST_S(last_request_id);
+		REICAST_S(next_request_id);
+		REICAST_S(status);
+		REICAST_S(command);
+		REICAST_S(params);
+		REICAST_S(result);
+		REICAST_S(cur_sector);
+		REICAST_S(multi_read_sector);
+		REICAST_S(multi_read_offset);
+		REICAST_S(multi_read_count);
+		REICAST_S(multi_read_total);
+		REICAST_S(multi_callback);
+		REICAST_S(multi_callback_arg);
+		REICAST_S(dma_trans_ended);
+		REICAST_S(xfer_end_time);
+#endif
+		
 		return true;
 	}
 	bool Unserialize(void **data, unsigned int *total_size)
 	{
+#ifdef __LIBRETRO__
 		LIBRETRO_US(last_request_id);
 		LIBRETRO_US(next_request_id);
 		LIBRETRO_US(status);
@@ -102,8 +121,26 @@ struct gdrom_hle_state_t
 		LIBRETRO_US(multi_callback_arg);
 		LIBRETRO_US(dma_trans_ended);
 		LIBRETRO_US(xfer_end_time);
-
+#else
+		REICAST_US(last_request_id);
+		REICAST_US(next_request_id);
+		REICAST_US(status);
+		REICAST_US(command);
+		REICAST_US(params);
+		REICAST_US(result);
+		REICAST_US(cur_sector);
+		REICAST_US(multi_read_sector);
+		REICAST_US(multi_read_offset);
+		REICAST_US(multi_read_count);
+		REICAST_US(multi_read_total);
+		REICAST_US(multi_callback);
+		REICAST_US(multi_callback_arg);
+		REICAST_US(dma_trans_ended);
+		REICAST_US(xfer_end_time);
+#endif
+		
 		return true;
 	}
 };
 extern gdrom_hle_state_t gd_hle_state;
+

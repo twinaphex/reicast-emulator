@@ -4,7 +4,7 @@
 	Bits and pieces from redream (https://github.com/inolen/redream)
 */
 
-#include <stdio.h>
+#include <cstdio>
 #include "types.h"
 #include "hw/sh4/sh4_mem.h"
 #include "hw/sh4/sh4_sched.h"
@@ -17,13 +17,13 @@
 #include "reios.h"
 #include "imgread/common.h"
 
+#include <algorithm>
+
 #define SWAP32(a) ((((a) & 0xff) << 24)  | (((a) & 0xff00) << 8) | (((a) >> 8) & 0xff00) | (((a) >> 24) & 0xff))
 
 #define debugf(...) DEBUG_LOG(REIOS, __VA_ARGS__)
 
 gdrom_hle_state_t gd_hle_state = { 0xffffffff, 2, BIOS_INACTIVE };
-
-extern int GDROM_TICK;
 
 static void GDROM_HLE_ReadSES()
 {
@@ -74,7 +74,7 @@ static void read_sectors_to(u32 addr, u32 sector, u32 count)
 	gd_hle_state.cur_sector = sector + count - 1;
 	if (virtual_addr)
 		gd_hle_state.xfer_end_time = 0;
-	else if (count > 5 && GDROM_TICK == 1500000)
+	else if (count > 5)
 		// Large Transfers: GD-ROM rate (approx. 1.8 MB/s)
 		gd_hle_state.xfer_end_time = sh4_sched_now64() + (u64)count * 2048 * 1000000L / 10240;
 	else
@@ -96,7 +96,7 @@ static void read_sectors_to(u32 addr, u32 sector, u32 count)
 	{
 		libGDR_ReadSector((u8 *)temp, sector, 1, sizeof(temp));
 
-		for (int i = 0; i < ARRAY_SIZE(temp); i++)
+		for (std::size_t i = 0; i < ARRAY_SIZE(temp); i++)
 		{
 			if (virtual_addr)
 				WriteMem32(addr, temp[i]);
@@ -177,7 +177,7 @@ static void GDCC_HLE_GETSCD() {
 		memcpy(GetMemPtr(dest, size), scd, size);
 	else
 	{
-		for (int i = 0; i < size; i++)
+		for (u32 i = 0; i < size; i++)
 			WriteMem8(dest++, scd[i]);
 	}
 
@@ -243,7 +243,7 @@ static void multi_xfer()
 	if (!dma)
 	{
 		gd_hle_state.result[2] = gd_hle_state.multi_read_total - gd_hle_state.multi_read_count;
-		gd_hle_state.result[3] = 0;
+		gd_hle_state.result[3] = 0;	// 1 hangs Bust-a-Move-4
 		if (gd_hle_state.multi_callback != 0)
 		{
 			Sh4cntx.r[4] = gd_hle_state.multi_callback_arg;
@@ -268,7 +268,7 @@ static void GD_HLE_Command(u32 cc)
 	switch(cc)
 	{
 	case GDCC_GETTOC:
-		debugf("GDROM: *FIXME* CMD GETTOC");
+		WARN_LOG(REIOS, "GDROM: *FIXME* CMD GETTOC");
 		break;
 
 	case GDCC_GETTOC2:
@@ -280,7 +280,7 @@ static void GD_HLE_Command(u32 cc)
 		break;
 
 	case GDCC_INIT:
-		debugf("GDROM: CMD INIT");
+		DEBUG_LOG(REIOS, "GDROM: CMD INIT");
 		gd_hle_state.multi_callback = 0;
 		gd_hle_state.multi_read_count = 0;
 		cdda.status = cdda_t::NoInfo;
@@ -323,20 +323,20 @@ static void GD_HLE_Command(u32 cc)
 		break;
 
 	case GDCC_RELEASE:
-		debugf("GDROM: CMD RELEASE");
+		DEBUG_LOG(REIOS, "GDROM: CMD RELEASE");
 		if (cdda.status == cdda_t::Paused)
 			cdda.status = cdda_t::Playing;
 		SecNumber.Status = GD_PLAY;
 		break;
 
 	case GDCC_STOP:
-		debugf("GDROM: CMD STOP");
+		DEBUG_LOG(REIOS, "GDROM: CMD STOP");
 		cdda.status = cdda_t::NoInfo;
 		SecNumber.Status = GD_STANDBY;
 		break;
 
 	case GDCC_SEEK:
-		debugf("GDROM: CMD SEEK");
+		DEBUG_LOG(REIOS, "GDROM: CMD SEEK");
 		cdda.status = cdda_t::Paused;
 		SecNumber.Status = GD_PAUSE;
 		break;
@@ -349,7 +349,7 @@ static void GD_HLE_Command(u32 cc)
 			u32 start_fad, end_fad, dummy;
 			libGDR_GetTrack(first_track, start_fad, dummy);
 			libGDR_GetTrack(last_track, dummy, end_fad);
-			debugf("GDROM: CMD PLAY first_track %x last_track %x repeats %x start_fad %x end_fad %x param4 %x", first_track, last_track, repeats,
+			DEBUG_LOG(REIOS, "GDROM: CMD PLAY first_track %x last_track %x repeats %x start_fad %x end_fad %x param4 %x", first_track, last_track, repeats,
 					start_fad, end_fad, gd_hle_state.params[3]);
 			cdda.status = cdda_t::Playing;
 			cdda.StartAddr.FAD = start_fad;
@@ -362,7 +362,7 @@ static void GD_HLE_Command(u32 cc)
 		break;
 
 	case GDCC_PAUSE:
-		debugf("GDROM: CMD PAUSE");
+		DEBUG_LOG(REIOS, "GDROM: CMD PAUSE");
 		if (cdda.status == cdda_t::Playing)
 			cdda.status = cdda_t::Paused;
 		SecNumber.Status = GD_PAUSE;
@@ -373,7 +373,7 @@ static void GD_HLE_Command(u32 cc)
 			u32 sector = gd_hle_state.params[0];
 			u32 num = gd_hle_state.params[1];
 
-			debugf("GDROM: CMD READ Sector=%d, Num=%d", sector, num);
+			DEBUG_LOG(REIOS, "GDROM: CMD READ Sector=%d, Num=%d", sector, num);
 			gd_hle_state.status = BIOS_DATA_AVAIL;
 			gd_hle_state.multi_read_sector = sector;
 			gd_hle_state.multi_read_count = num * 2048;
@@ -436,7 +436,7 @@ static void GD_HLE_Command(u32 cc)
 			// coded to 0x02 on boot
 			ver[len - 1] = 0x02;
 
-			for (int i = 0; i < len; i++)
+			for (u32 i = 0; i < len; i++)
 				WriteMem8(dest++, ver[i]);
 		}
 		break;
@@ -502,7 +502,7 @@ static void GD_HLE_Command(u32 cc)
 			u32 num = gd_hle_state.params[1];
 			bool dma = cc == GDCC_MULTI_DMAREAD;
 
-			debugf("GDROM: MULTI_%sREAD Sector=%d, Num=%d", dma ? "DMA" : "PIO", sector, num);
+			DEBUG_LOG(REIOS, "GDROM: MULTI_%sREAD Sector=%d, Num=%d", dma ? "DMA" : "PIO", sector, num);
 
 			gd_hle_state.status = BIOS_DATA_AVAIL;
 			gd_hle_state.multi_read_sector = sector;
@@ -522,7 +522,7 @@ static void GD_HLE_Command(u32 cc)
 			u32 dest = gd_hle_state.params[0];
 			u32 size = gd_hle_state.params[1];
 			bool dma = cc == GDCC_REQ_DMA_TRANS;
-			debugf("GDROM: REQ_%s_TRANS dest %x size %x", dma ? "DMA" : "PIO",
+			DEBUG_LOG(REIOS, "GDROM: REQ_%s_TRANS dest %x size %x", dma ? "DMA" : "PIO",
 					dest, size);
 			if (dma)
 				multi_xfer<true>();
@@ -643,7 +643,7 @@ void gdrom_hle_op()
 
 		case GDROM_INIT:
 			// Initialize the GDROM subsystem. Should be called before any requests are enqueued.
-			debugf("GDROM: HLE GDROM_INIT");
+			DEBUG_LOG(REIOS, "GDROM: HLE GDROM_INIT");
 			gd_hle_state.last_request_id = 0xFFFFFFFF;
 			gd_hle_state.next_request_id = 2;
 			gd_hle_state.status = BIOS_INACTIVE;
@@ -651,7 +651,7 @@ void gdrom_hle_op()
 
 		case GDROM_RESET:
 			// Resets the drive.
-			debugf("GDROM: HLE GDROM_RESET");
+			DEBUG_LOG(REIOS, "GDROM: HLE GDROM_RESET");
 			gd_hle_state.last_request_id = 0xFFFFFFFF;
 			gd_hle_state.status = BIOS_INACTIVE;
 			break;
@@ -703,7 +703,7 @@ void gdrom_hle_op()
 			//	r4 = request id
 			//
 			// Returns: zero if successful, nonzero if failure
-			debugf("GDROM: HLE GDROM_ABORT_COMMAND r4:%X",r[4]);
+			WARN_LOG(REIOS, "GDROM: HLE GDROM_ABORT_COMMAND r4:%X",r[4]);
 			if (r[4] == gd_hle_state.last_request_id
 					&& (gd_hle_state.status == BIOS_DATA_AVAIL || gd_hle_state.status == BIOS_ACTIVE))
 			{
@@ -730,16 +730,16 @@ void gdrom_hle_op()
 			//	3 	Sector size in bytes (normally 2048)
 			//
 			// Returns: zero if successful, -1 if failure
-			debugf("GDROM: HLE GDROM_SECTOR_MODE PTR_r4:%X",r[4]);
+			DEBUG_LOG(REIOS, "GDROM: HLE GDROM_SECTOR_MODE PTR_r4:%X",r[4]);
 			for(int i=0; i<4; i++) {
 				SecMode[i] = ReadMem32(r[4]+(i<<2));
-				debugf("%08X", SecMode[i]);
+				DEBUG_LOG(REIOS, "%08X", SecMode[i]);
 			}
 			r[0] = 0;
 			break;
 
 		case GDROM_G1_DMA_END:
-			debugf("GDROM: G1_DMA_END callback %x arg %x", r[4], r[5]);
+			DEBUG_LOG(REIOS, "GDROM: G1_DMA_END callback %x arg %x", r[4], r[5]);
 			gd_hle_state.multi_callback = r[4];
 			gd_hle_state.multi_callback_arg = r[5];
 			r[0] = 0;
@@ -754,7 +754,7 @@ void gdrom_hle_op()
 		case GDROM_REQ_DMA_TRANS:
 			gd_hle_state.params[0] = ReadMem32(r[5]);
 			gd_hle_state.params[1] = ReadMem32(r[5] + 4);
-			debugf("GDROM: REQ_DMA_TRANS req_id %x dest %x size %x",
+			DEBUG_LOG(REIOS, "GDROM: REQ_DMA_TRANS req_id %x dest %x size %x",
 					r[4], gd_hle_state.params[0], gd_hle_state.params[1]);
 
 			if (gd_hle_state.status != BIOS_DATA_AVAIL || gd_hle_state.params[1] > gd_hle_state.multi_read_count)
@@ -771,7 +771,7 @@ void gdrom_hle_op()
 		case GDROM_REQ_PIO_TRANS:
 			gd_hle_state.params[0] = ReadMem32(r[5]);
 			gd_hle_state.params[1] = ReadMem32(r[5] + 4);
-			debugf("GDROM: REQ_PIO_TRANS req_id %x dest %x size %x",
+			DEBUG_LOG(REIOS, "GDROM: REQ_PIO_TRANS req_id %x dest %x size %x",
 					r[4], gd_hle_state.params[0], gd_hle_state.params[1]);
 			if (gd_hle_state.status != BIOS_DATA_AVAIL || gd_hle_state.params[1] > gd_hle_state.multi_read_count)
 			{
@@ -787,7 +787,7 @@ void gdrom_hle_op()
 		case GDROM_CHECK_DMA_TRANS:
 			{
 				u32 len_addr = r[5];
-				debugf("GDROM: CHECK_DMA_TRANS req_id %x len_addr %x -> %x", r[4], len_addr, gd_hle_state.multi_read_count);
+				DEBUG_LOG(REIOS, "GDROM: CHECK_DMA_TRANS req_id %x len_addr %x -> %x", r[4], len_addr, gd_hle_state.multi_read_count);
 				if (gd_hle_state.status == BIOS_DATA_AVAIL)
 				{
 					WriteMem32(len_addr, gd_hle_state.multi_read_count);
@@ -801,7 +801,7 @@ void gdrom_hle_op()
 			break;
 
 		case GDROM_SET_PIO_CALLBACK:
-			debugf("GDROM: SET_PIO_CALLBACK callback %x arg %x", r[4], r[5]);
+			DEBUG_LOG(REIOS, "GDROM: SET_PIO_CALLBACK callback %x arg %x", r[4], r[5]);
 			gd_hle_state.multi_callback = r[4];
 			gd_hle_state.multi_callback_arg = r[5];
 			r[0] = 0;
@@ -810,7 +810,7 @@ void gdrom_hle_op()
 		case GDROM_CHECK_PIO_TRANS:
 			{
 				u32 len_addr = r[5];
-				debugf("GDROM: CHECK_PIO_TRANS req_id %x len_addr %x -> %x", r[4], len_addr, gd_hle_state.multi_read_count);
+				DEBUG_LOG(REIOS, "GDROM: CHECK_PIO_TRANS req_id %x len_addr %x -> %x", r[4], len_addr, gd_hle_state.multi_read_count);
 				if (gd_hle_state.status == BIOS_DATA_AVAIL)
 				{
 					WriteMem32(len_addr, gd_hle_state.multi_read_count);
@@ -835,7 +835,7 @@ void gdrom_hle_op()
 		case MISC_INIT:
 			// Initializes all the syscall vectors to their default values.
 			// Returns: zero
-			debugf("GDROM: MISC_INIT not implemented");
+			WARN_LOG(REIOS, "GDROM: MISC_INIT not implemented");
 			r[0] = 0;
 			break;
 
@@ -847,11 +847,11 @@ void gdrom_hle_op()
 			//	r5 = pointer to handler function, or NULL to clear
 			//
 			// Returns: zero if successful, -1 if setting/clearing the handler fails
-			debugf("GDROM: MISC_SETVECTOR not implemented");
+			WARN_LOG(REIOS, "GDROM: MISC_SETVECTOR not implemented");
 			break;
 
 		default:
-			debugf("GDROM: Unknown MISC command %x", r[7]);
+			WARN_LOG(REIOS, "GDROM: Unknown MISC command %x", r[7]);
 			break;
 		}
 	}

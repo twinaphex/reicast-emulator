@@ -22,6 +22,11 @@
 #include "iso9660.h"
 #include "font.h"
 #include "hw/aica/aica.h"
+#include "hw/aica/aica_mem.h"
+#ifndef __LIBRETRO__
+#include "oslib/oslib.h"
+#endif
+#include "imgread/common.h"
 
 #include <map>
 
@@ -43,8 +48,6 @@
 static MemChip *flashrom;
 static u32 base_fad = 45150;
 static bool descrambl = false;
-
-extern char game_dir_no_slash[1024];
 
 static void reios_pre_init()
 {
@@ -86,7 +89,7 @@ static bool reios_locate_bootfile(const char* bootfile)
 		INFO_LOG(REIOS, "iso9660 PVD found");
 		u32 lba = decode_iso733(pvd->root_directory_record.extent);
 		u32 len = decode_iso733(pvd->root_directory_record.size);
-
+		
 		data_len = ((len + 2047) / 2048) * 2048;
 
 		INFO_LOG(REIOS, "iso9660 root_directory, FAD: %d, len: %d", 150 + lba, data_len);
@@ -99,7 +102,7 @@ static bool reios_locate_bootfile(const char* bootfile)
 	int bootfile_len = strlen(bootfile);
 	while (bootfile_len > 0 && isspace(bootfile[bootfile_len - 1]))
 		bootfile_len--;
-	for (int i = 0; i < data_len; )
+	for (u32 i = 0; i < data_len; )
 	{
 		iso9660_dir_t *dir = (iso9660_dir_t *)&temp[i];
 		if (dir->length == 0)
@@ -111,7 +114,7 @@ static bool reios_locate_bootfile(const char* bootfile)
 
 			u32 lba = decode_iso733(dir->extent);
 			u32 len = decode_iso733(dir->size);
-
+			
 			if (!memcmp(bootfile, "0WINCEOS.BIN", 12))
 			{
 				lba++;
@@ -190,11 +193,11 @@ static void reios_sys_system() {
 			u8 data[24] = {0};
 
 			// read system_id from 0x0001a056
-			for (int i  = 0; i < 8; i++)
+			for (u32 i  = 0; i < 8; i++)
 				data[i] = flashrom->Read8(0x1a056 + i);
 
 			// read system_props from 0x0001a000
-			for (int i  = 0; i < 5; i++)
+			for (u32 i  = 0; i < 5; i++)
 				data[8 + i] = flashrom->Read8(0x1a000 + i);
 
 			// system settings
@@ -301,14 +304,14 @@ static void reios_sys_flashrom() {
 				u32 size = r[6];
 
 				debugf("reios_sys_flashrom: FLASHROM_READ offs %x dest %08x size %x", offset, dest, size);
-				for (int i = 0; i < size; i++)
+				for (u32 i = 0; i < size; i++)
 					WriteMem8(dest++, flashrom->Read8(offset + i));
 
 				r[0] = size;
 			}
 			break;
 
-
+			
 		case 2:	//FLASHROM_WRITE
 			{
 				/*
@@ -325,7 +328,7 @@ static void reios_sys_flashrom() {
 
 				debugf("reios_sys_flashrom: FLASHROM_WRITE offs %x src %08x size %x", offs, src, size);
 
-				for (int i = 0; i < size; i++)
+				for (u32 i = 0; i < size; i++)
 					flashrom->data[offs + i] &= ReadMem8(src + i);
 
 				r[0] = size;
@@ -333,7 +336,7 @@ static void reios_sys_flashrom() {
 			break;
 
 		case 3:	//FLASHROM_DELETE
-			{
+			{			
 				/*
 				   r4 = offset of the start of the partition you want to delete, in bytes from the start of the flashrom
 				   Returns:
@@ -350,7 +353,7 @@ static void reios_sys_flashrom() {
 					int part_offset;
 					int size;
 					static_cast<DCFlashChip*>(flashrom)->GetPartitionInfo(part, &part_offset, &size);
-					if (offset == part_offset)
+					if (offset == (u32)part_offset)
 					{
 						found = true;
 						memset(flashrom->data + offset, 0xFF, size);
@@ -365,16 +368,6 @@ static void reios_sys_flashrom() {
 			WARN_LOG(REIOS, "reios_sys_flashrom: not handled, %d", cmd);
 			break;
 	}
-}
-
-static void reios_sys_gd()
-{
-	gdrom_hle_op();
-}
-
-static void reios_sys_gd2()
-{
-	gdrom_hle_op();
 }
 
 static void reios_sys_misc()
@@ -394,7 +387,6 @@ static void reios_sys_misc()
 }
 
 typedef void hook_fp();
-static u32 hook_addr(hook_fp* fn);
 
 static void setup_syscall(u32 hook_addr, u32 syscall_addr) {
 	WriteMem32(syscall_addr, hook_addr);
@@ -614,24 +606,27 @@ static void reios_boot()
 
 	memset(GetMemPtr(0x8C000000, 0), 0xFF, 64 * 1024);
 
-	setup_syscall(hook_addr(&reios_sys_system), dc_bios_syscall_system);
-	setup_syscall(hook_addr(&reios_sys_font), dc_bios_syscall_font);
-	setup_syscall(hook_addr(&reios_sys_flashrom), dc_bios_syscall_flashrom);
-	setup_syscall(hook_addr(&reios_sys_gd), dc_bios_syscall_gd);
-	setup_syscall(hook_addr(&reios_sys_gd2), dc_bios_syscall_gd2);
-	setup_syscall(hook_addr(&reios_sys_misc), dc_bios_syscall_misc);
+	setup_syscall(0x8C001000, dc_bios_syscall_system);
+	setup_syscall(0x8C001002, dc_bios_syscall_font);
+	setup_syscall(0x8C001004, dc_bios_syscall_flashrom);
+	setup_syscall(0x8C001006, dc_bios_syscall_gd);
+	setup_syscall(dc_bios_entrypoint_gd2, dc_bios_syscall_gd2);
+	setup_syscall(0x8C001008, dc_bios_syscall_misc);
 
 	//Infinite loop for arm !
 	WriteMem32(0x80800000, 0xEAFFFFFE);
 
-	if (!settings.reios.ElfFile.empty()) {
-		if (!reios_loadElf(settings.reios.ElfFile)) {
-			msgboxf("Failed to open %s", MBX_ICONERROR, settings.reios.ElfFile.c_str());
+	std::string extension = get_file_extension(settings.imgread.ImagePath);
+	if (extension == "elf")
+	{
+		if (!reios_loadElf(settings.imgread.ImagePath)) {
+			msgboxf("Failed to open %s", MBX_ICONERROR, settings.imgread.ImagePath);
 		}
 		reios_setup_state(0x8C010000);
 	}
 	else {
-		if (settings.System == DC_PLATFORM_DREAMCAST) {
+		if (settings.System == DC_PLATFORM_DREAMCAST)
+		{
 			char bootfile[sizeof(ip_meta.boot_filename) + 1] = {0};
 			memcpy(bootfile, ip_meta.boot_filename, sizeof(ip_meta.boot_filename));
 			if (bootfile[0] == '\0' || !reios_locate_bootfile(bootfile))
@@ -651,7 +646,7 @@ static void reios_boot()
 				msgboxf("Naomi boot failure", MBX_ICONERROR);
 			}
 
-			int size = *sz;
+			const u32 size = *sz;
 
 			data_size = 1;
 			verify(size < RAM_SIZE && CurrentCartridge->GetPtr(size - 1, data_size) && "Invalid cart size");
@@ -665,13 +660,11 @@ static void reios_boot()
 }
 
 static std::map<u32, hook_fp*> hooks;
-static std::map<hook_fp*, u32> hooks_rev;
 
 #define SYSCALL_ADDR_MAP(addr) (((addr) & 0x1FFFFFFF) | 0x80000000)
 
 static void register_hook(u32 pc, hook_fp* fn) {
 	hooks[SYSCALL_ADDR_MAP(pc)] = fn;
-	hooks_rev[fn] = pc;
 }
 
 void DYNACALL reios_trap(u32 op) {
@@ -689,16 +682,6 @@ void DYNACALL reios_trap(u32 op) {
 		next_pc = pr;
 }
 
-static u32 hook_addr(hook_fp* fn) {
-	if (hooks_rev.count(fn))
-		return hooks_rev[fn];
-	else {
-		ERROR_LOG(REIOS, "hook_addr: Failed to reverse lookup %p", fn);
-		verify(false);
-		return 0;
-	}
-}
-
 bool reios_init()
 {
 	INFO_LOG(REIOS, "reios: Init");
@@ -708,18 +691,21 @@ bool reios_init()
 	register_hook(0x8C001000, reios_sys_system);
 	register_hook(0x8C001002, reios_sys_font);
 	register_hook(0x8C001004, reios_sys_flashrom);
-	register_hook(0x8C001006, reios_sys_gd);
+	register_hook(0x8C001006, gdrom_hle_op);
 	register_hook(0x8C001008, reios_sys_misc);
 
-	register_hook(dc_bios_entrypoint_gd2, reios_sys_gd2);
+	register_hook(dc_bios_entrypoint_gd2, gdrom_hle_op);
 
 	return true;
 }
 
-void reios_reset(u8* rom, MemChip* flash)
+void reios_set_flash(MemChip* flash)
 {
 	flashrom = flash;
+}
 
+void reios_reset(u8* rom)
+{
 	memset(rom, 0x00, BIOS_SIZE);
 	memset(GetMemPtr(0x8C000000, 0), 0, RAM_SIZE);
 
@@ -733,9 +719,7 @@ void reios_reset(u8* rom, MemChip* flash)
 	// 7078 24 × 24 pixels (72 bytes) characters
 	// 129 32 × 32 pixels (128 bytes) characters
 	memset(pFont, 0, 536496);
-	std::string font_file(game_dir_no_slash);
-	font_file += "/font.bin";
-	FILE *font = fopen(font_file.c_str(), "rb");
+	FILE *font = nowide::fopen(get_readonly_data_path("font.bin").c_str(), "rb");
 	if (font == NULL)
 	{
 		INFO_LOG(REIOS, "font.bin not found. Using built-in font");
@@ -743,11 +727,11 @@ void reios_reset(u8* rom, MemChip* flash)
 	}
 	else
 	{
-		fseek(font, 0, SEEK_END);
-		size_t size = ftell(font);
-		fseek(font, 0, SEEK_SET);
-		size_t nread = fread(pFont, 1, size, font);
-		fclose(font);
+		std::fseek(font, 0, SEEK_END);
+		size_t size = std::ftell(font);
+		std::fseek(font, 0, SEEK_SET);
+		size_t nread = std::fread(pFont, 1, size, font);
+		std::fclose(font);
 		if (nread != size)
 			WARN_LOG(REIOS, "font.bin: read truncated");
 		else

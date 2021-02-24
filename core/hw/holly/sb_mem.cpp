@@ -272,7 +272,7 @@ bool LoadHle(const string& root) {
 		WARN_LOG(FLASHROM, "No nvmem loaded\n");
 	}
 
-   reios_reset(sys_rom.data, &sys_nvmem_flash);
+   reios_reset(sys_rom.data);
 
    return true;
 }
