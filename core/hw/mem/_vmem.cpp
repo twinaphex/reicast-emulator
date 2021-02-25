@@ -49,19 +49,6 @@ void _vmem_get_ptrs(u32 sz,bool write,void*** vmap,void*** func)
 	}
 }
 
-void* _vmem_get_ptr2(u32 addr,u32& mask)
-{
-   u32   page=addr>>24;
-   size_t  iirf=(size_t)_vmem_MemInfo_ptr[page];
-   void* ptr=(void*)(iirf&~HANDLER_MAX);
-
-   if (ptr==0)
-      return 0;
-
-   mask=0xFFFFFFFF>>iirf;
-   return ptr;
-}
-
 void* _vmem_read_const(u32 addr,bool& ismem,u32 sz)
 {
 	u32   page=addr>>24;
@@ -74,19 +61,15 @@ void* _vmem_read_const(u32 addr,bool& ismem,u32 sz)
 		const unat id=iirf;
 		if (sz==1)
 		{
-			return (void*)_vmem_RF8[id/4];
+			return (void*)_vmem_RF8[id];
 		}
 		else if (sz==2)
 		{
-			return (void*)_vmem_RF16[id/4];
+			return (void*)_vmem_RF16[id];
 		}
 		else if (sz==4)
 		{
-			return (void*)_vmem_RF32[id/4];
-		}
-		else
-		{
-			die("Invalid size");
+			return (void*)_vmem_RF32[id];
 		}
 	}
 	else
@@ -99,7 +82,7 @@ void* _vmem_read_const(u32 addr,bool& ismem,u32 sz)
 	}
 	die("Invalid memory size");
 
-	return 0;
+	return nullptr;
 }
 
 void* _vmem_write_const(u32 addr,bool& ismem,u32 sz)
@@ -114,19 +97,15 @@ void* _vmem_write_const(u32 addr,bool& ismem,u32 sz)
 		const unat id=iirf;
 		if (sz==1)
 		{
-			return (void*)_vmem_WF8[id/4];
+			return (void*)_vmem_WF8[id];
 		}
 		else if (sz==2)
 		{
-			return (void*)_vmem_WF16[id/4];
+			return (void*)_vmem_WF16[id];
 		}
 		else if (sz==4)
 		{
-			return (void*)_vmem_WF32[id/4];
-		}
-		else
-		{
-			die("Invalid size");
+			return (void*)_vmem_WF32[id];
 		}
 	}
 	else
@@ -139,7 +118,7 @@ void* _vmem_write_const(u32 addr,bool& ismem,u32 sz)
 	}
 	die("Invalid memory size");
 
-	return 0;
+	return nullptr;
 }
 
 void* _vmem_page_info(u32 addr,bool& ismem,u32 sz,u32& page_sz,bool rw)
@@ -155,15 +134,15 @@ void* _vmem_page_info(u32 addr,bool& ismem,u32 sz,u32& page_sz,bool rw)
 		page_sz=24;
 		if (sz==1)
 		{
-			return rw?(void*)_vmem_RF8[id/4]:(void*)_vmem_WF8[id/4];
+			return rw?(void*)_vmem_RF8[id]:(void*)_vmem_WF8[id];
 		}
 		else if (sz==2)
 		{
-			return rw?(void*)_vmem_RF16[id/4]:(void*)_vmem_WF16[id/4];
+			return rw?(void*)_vmem_RF16[id]:(void*)_vmem_WF16[id];
 		}
 		else if (sz==4)
 		{
-			return rw?(void*)_vmem_RF32[id/4]:(void*)_vmem_WF32[id/4];
+			return rw?(void*)_vmem_RF32[id]:(void*)_vmem_WF32[id];
 		}
 		else
 		{
@@ -205,28 +184,27 @@ INLINE Trv DYNACALL _vmem_readt(u32 addr)
 		const u32 id=iirf;
 		if (sz==1)
 		{
-			return (T)_vmem_RF8[id/4](addr);
+			return (T)_vmem_RF8[id](addr);
 		}
 		else if (sz==2)
 		{
-			return (T)_vmem_RF16[id/4](addr);
+			return (T)_vmem_RF16[id](addr);
 		}
 		else if (sz==4)
 		{
-			return _vmem_RF32[id/4](addr);
+			return _vmem_RF32[id](addr);
 		}
 		else if (sz==8)
 		{
-			T rv=_vmem_RF32[id/4](addr);
-			rv|=(T)((u64)_vmem_RF32[id/4](addr+4)<<32);
+			T rv=_vmem_RF32[id](addr);
+			rv|=(T)((u64)_vmem_RF32[id](addr+4)<<32);
 			
 			return rv;
 		}
-		else
-		{
-			die("Invalid size");
-		}
 	}
+
+   die("Invalid size");
+   return 0;
 }
 template u8 DYNACALL _vmem_readt<u8, u8>(u32 addr);
 template u16 DYNACALL _vmem_readt<u16, u16>(u32 addr);
@@ -254,20 +232,20 @@ INLINE void DYNACALL _vmem_writet(u32 addr,T data)
 		const u32 id=iirf;
 		if (sz==1)
 		{
-			 _vmem_WF8[id/4](addr,data);
+			 _vmem_WF8[id](addr,data);
 		}
 		else if (sz==2)
 		{
-			 _vmem_WF16[id/4](addr,data);
+			 _vmem_WF16[id](addr,data);
 		}
 		else if (sz==4)
 		{
-			 _vmem_WF32[id/4](addr,data);
+			 _vmem_WF32[id](addr,data);
 		}
 		else if (sz==8)
 		{
-			_vmem_WF32[id/4](addr,(u32)data);
-			_vmem_WF32[id/4](addr+4,(u32)((u64)data>>32));
+			_vmem_WF32[id](addr,(u32)data);
+			_vmem_WF32[id](addr+4,(u32)((u64)data>>32));
 		}
 		else
 		{
@@ -299,8 +277,6 @@ void DYNACALL _vmem_WriteMem64(u32 Address,u64 data) { _vmem_writet<u64>(Address
 //0xDEADC0D3 or 0
 #define MEM_ERROR_RETURN_VALUE 0xDEADC0D3
 
-//phew .. that was lota asm code ;) lets go back to C :D
-//default mem handlers ;)
 //default read handlers
 u8 DYNACALL _vmem_ReadMem8_not_mapped(u32 addresss)
 {
@@ -375,7 +351,7 @@ void _vmem_map_handler(_vmem_handler Handler,u32 start,u32 end)
 	verify(start<=end);
 	for (u32 i=start;i<=end;i++)
    {
-		_vmem_MemInfo_ptr[i]=((u8*)0)+(0x00000000 + Handler*4);
+      _vmem_MemInfo_ptr[i] = (u8*)nullptr + Handler;
    }
 }
 
