@@ -383,6 +383,7 @@ void main()
 int max_image_width;
 int max_image_height;
 extern GLuint fogTextureId;
+extern GLuint paletteTextureId;
 
 bool gl4CompilePipelineShader(	gl4PipelineShader* s, const char *pixel_source /* = PixelPipelineShader */, const char *vertex_source /* = NULL */)
 {
@@ -491,6 +492,8 @@ static void gl_term(void)
 	fbTextureId = 0;
 	glDeleteTextures(1, &fogTextureId);
 	fogTextureId = 0;
+	glcache.DeleteTextures(1, &paletteTextureId);
+	paletteTextureId = 0;
 }
 
 static bool gl_create_resources(void)
@@ -921,6 +924,7 @@ struct gl4rend : Renderer
 		}
 #endif
 		fog_needs_update = true;
+		palette_updated = true;
 		TexCache.Clear();
 
 		if (settings.rend.PowerVR2Filter)

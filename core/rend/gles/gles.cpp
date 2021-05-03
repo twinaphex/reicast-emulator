@@ -685,6 +685,8 @@ static void gl_term(void)
 	fbTextureId = 0;
 	glDeleteTextures(1, &fogTextureId);
 	fogTextureId = 0;
+	glcache.DeleteTextures(1, &paletteTextureId);
+	paletteTextureId = 0;
 
 	gl_delete_shaders();
 }
@@ -1111,6 +1113,7 @@ struct glesrend : Renderer
       }
 #endif
       fog_needs_update = true;
+      palette_updated = true;
       TexCache.Clear();
 
       if (settings.rend.PowerVR2Filter)
